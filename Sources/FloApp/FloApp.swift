@@ -2607,19 +2607,11 @@ private struct ProviderConfigurationSection: View {
         pendingRemovalProvider = provider
     }
 
-    private func toggleExpanded(_ provider: AIProvider) {
-        if expandedProviders.contains(provider) {
-            expandedProviders.remove(provider)
-        } else {
-            expandedProviders.insert(provider)
-        }
-    }
-
     private func providerCard(_ provider: AIProvider) -> some View {
         let displayName = controller.providerDisplayName(for: provider)
         let credentials = controller.providerCredentials(for: provider)
         let keyCount = credentials.count
-        let isExpanded = expandedProviders.contains(provider)
+        let isExpanded = true
         let isPendingRemoval = pendingRemovalProvider == provider
         let addingCredential = isAddingCredentialByProvider.contains(provider)
         let editingIndex = editingCredentialIndexByProvider[provider]
@@ -2652,16 +2644,6 @@ private struct ProviderConfigurationSection: View {
                 }
 
                 Spacer(minLength: 0)
-
-                Button {
-                    toggleExpanded(provider)
-                } label: {
-                    Image(systemName: isExpanded ? "chevron.up.circle.fill" : "chevron.down.circle")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.72))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(isExpanded ? "Collapse \(displayName)" : "Expand \(displayName)")
 
                 Button {
                     handleRemoveTap(provider)
