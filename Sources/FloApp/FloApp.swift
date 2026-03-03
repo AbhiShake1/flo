@@ -182,7 +182,7 @@ private enum AppFlowStage: Int, CaseIterable {
         case .permissions:
             return "System permission management"
         case .settings:
-            return "Providers, dictation, and system controls"
+            return "Dictation and system controls"
         case .hotkeys:
             return "Shortcut bindings and keyboard controls"
         case .history:
@@ -912,7 +912,7 @@ private struct SettingsStageView: View {
                         Text("Workspace Settings")
                             .font(.system(size: 24, weight: .semibold))
                             .foregroundStyle(FloTheme.textPrimary)
-                        Text("Tune providers, dictation behavior, and core system controls.")
+                        Text("Tune dictation behavior and core system controls.")
                             .foregroundStyle(FloTheme.textSecondary)
                     }
 
@@ -937,11 +937,6 @@ private struct SettingsStageView: View {
                 alignment: .leading,
                 spacing: 16
             ) {
-                if showProviderSection {
-                    CardContainer {
-                        ProviderConfigurationSection(controller: controller)
-                    }
-                }
                 if showDictationSection {
                     CardContainer {
                         DictationStyleConfigurationSection(controller: controller)
@@ -994,36 +989,16 @@ private struct SettingsStageView: View {
         matches(["shortcut", "hotkey", "dictation hold", "read selected", "custom key", "keyboard"])
     }
 
-    private var showProviderSection: Bool {
-        matches([
-            "provider",
-            "api key",
-            "openai",
-            "gemini",
-            "openrouter",
-            "groq",
-            "xai",
-            "deepinfra",
-            "together",
-            "perplexity",
-            "auth",
-            "failover",
-            "routing",
-            "fallback"
-        ])
-    }
-
     private var showDictationSection: Bool {
         matches(["dictation", "rewrite", "tone", "warmth", "enthusiasm", "emoji", "instructions"])
     }
 
     private var showSystemSection: Bool {
-        matches(["system", "live typing", "updates"])
+        matches(["system", "live typing", "updates", "dictation"])
     }
 
     private var showEmptyState: Bool {
         !searchTerms.isEmpty &&
-            !showProviderSection &&
             !showHotkeysSection &&
             !showDictationSection &&
             !showSystemSection
