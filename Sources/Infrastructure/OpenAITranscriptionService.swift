@@ -22,7 +22,7 @@ public final class OpenAITranscriptionService: TranscriptionService, @unchecked 
 
     public func transcribe(audioFileURL: URL, authToken: String) async throws -> TranscriptResult {
         guard configuration.isAllowedHost(configuration.transcriptionURL) else {
-            throw FloError.network("Blocked host for transcription endpoint.")
+            throw FloError.network("Blocked host for \(configuration.provider.displayName) transcription endpoint.")
         }
 
         let boundary = "flo-boundary-\(UUID().uuidString)"
@@ -52,7 +52,11 @@ public final class OpenAITranscriptionService: TranscriptionService, @unchecked 
 
                 let (data, response) = try await urlSession.data(for: request)
                 guard let httpResponse = response as? HTTPURLResponse else {
-                    throw FloError.network("Invalid response")
+                    throw ProviderRequestError.invalidResponse(
+                        provider: configuration.provider,
+                        operation: "transcription",
+                        message: "Expected HTTP response."
+                    )
                 }
 
                 if (200..<300).contains(httpResponse.statusCode) {
@@ -76,13 +80,22 @@ public final class OpenAITranscriptionService: TranscriptionService, @unchecked 
                     continue
                 }
 
-                throw FloError.network(String(data: data, encoding: .utf8) ?? "Transcription request failed")
+                throw ProviderRequestError.http(
+                    provider: configuration.provider,
+                    operation: "transcription",
+                    statusCode: httpResponse.statusCode,
+                    message: String(data: data, encoding: .utf8) ?? "Transcription request failed"
+                )
             } catch let urlError as URLError {
                 if !didRetryNetworkFailure {
                     didRetryNetworkFailure = true
                     continue
                 }
-                throw FloError.network(urlError.localizedDescription)
+                throw ProviderRequestError.transport(
+                    provider: configuration.provider,
+                    operation: "transcription",
+                    message: urlError.localizedDescription
+                )
             } catch is CancellationError {
                 throw CancellationError()
             } catch {

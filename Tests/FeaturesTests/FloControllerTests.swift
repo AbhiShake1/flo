@@ -40,8 +40,32 @@ struct FloControllerTests {
         await controller.bootstrap()
 
         #expect(controller.isAuthenticated == true)
-        #expect(controller.statusMessage == "Using Gemini API key mode.")
+        #expect(controller.statusMessage == "Using API key mode with provider failover.")
         #expect(controller.canAttemptLogin == false)
+    }
+
+    @Test
+    @MainActor
+    func bootstrapWithoutKeyForNonOAuthProviderRequiresApiKey() async {
+        let configuration = makeConfiguration(
+            oauth: sampleOAuthConfiguration(),
+            provider: .openrouter,
+            geminiApiKey: nil
+        )
+        let dependencies = TestDependencies(configuration: configuration)
+        let controller = FloController(environment: dependencies.environment)
+
+        await controller.bootstrap()
+
+        #expect(controller.canAttemptLogin == false)
+        #expect(controller.oauthBlockerMessage?.contains("No API keys found for OpenRouter") == true)
+
+        switch controller.authState {
+        case .authError:
+            break
+        default:
+            Issue.record("Expected authError when active provider requires API key auth.")
+        }
     }
 
     @Test
@@ -57,6 +81,111 @@ struct FloControllerTests {
         #expect(controller.isAuthenticated == true)
         #expect(dependencies.providerCredentialStore.credential(for: "gemini") == "gemini_saved_123")
         #expect(controller.statusMessage == "Gemini API key saved in keychain.")
+    }
+
+    @Test
+    @MainActor
+    func saveProviderCredentialParsesAndStoresMultipleKeys() async {
+        let configuration = makeConfiguration(oauth: nil, provider: .gemini, geminiApiKey: nil)
+        let dependencies = TestDependencies(configuration: configuration)
+        let controller = FloController(environment: dependencies.environment)
+
+        await controller.bootstrap()
+        controller.saveProviderCredential("gemini_saved_1, gemini_saved_2\ngemini_saved_3")
+
+        #expect(dependencies.providerCredentialStore.credentialPools["gemini"] == [
+            "gemini_saved_1",
+            "gemini_saved_2",
+            "gemini_saved_3"
+        ])
+        #expect(controller.statusMessage == "Gemini API keys saved in keychain (3).")
+    }
+
+    @Test
+    @MainActor
+    func saveProviderCredentialForNonPrimaryProviderIsSupported() async {
+        let configuration = makeConfiguration(oauth: sampleOAuthConfiguration(), provider: .openai, geminiApiKey: nil)
+        let dependencies = TestDependencies(configuration: configuration)
+        let controller = FloController(environment: dependencies.environment)
+
+        await controller.bootstrap()
+        controller.saveProviderCredential("openrouter_saved_1", for: .openrouter)
+
+        #expect(dependencies.providerCredentialStore.credentialPools["openrouter"] == ["openrouter_saved_1"])
+        #expect(controller.isAuthenticated == true)
+        #expect(controller.providerCredentialSourceLabel(for: .openrouter) == "Saved in app keychain")
+    }
+
+    @Test
+    @MainActor
+    func providerRoutingOverridesAffectControllerOrderAndPolicy() {
+        let configuration = FloConfiguration.loadFromEnvironment([
+            "FLO_AI_PROVIDER_ORDER": "openai,gemini",
+            "FLO_OPENAI_API_KEY": "openai_key_1",
+            "FLO_GEMINI_API_KEY": "gemini_key_1",
+            "FLO_CHATGPT_OAUTH_ENABLED": "false"
+        ])
+        let dependencies = TestDependencies(configuration: configuration)
+        let controller = FloController(environment: dependencies.environment)
+
+        #expect(controller.configuredProviderOrder.prefix(2) == [.openai, .gemini])
+        #expect(controller.failoverAllowCrossProviderFallback == true)
+
+        controller.moveProviderDownInFailoverOrder(.openai)
+        #expect(controller.configuredProviderOrder.prefix(2) == [.gemini, .openai])
+
+        controller.setProviderEnabledInFailover(.openai, enabled: false)
+        #expect(controller.providerEnabledForFailover(.openai) == false)
+        #expect(controller.providerEnabledForFailover(.gemini) == true)
+
+        controller.setFailoverAllowCrossProviderFallback(false)
+        controller.setFailoverMaxAttempts(5)
+        controller.setFailoverFailureThreshold(3)
+        controller.setFailoverCooldownSeconds(45)
+
+        #expect(controller.failoverAllowCrossProviderFallback == false)
+        #expect(controller.failoverMaxAttempts == 5)
+        #expect(controller.failoverFailureThreshold == 3)
+        #expect(controller.failoverCooldownSeconds == 45)
+
+        let overrides = dependencies.providerRoutingStore.overrides
+        #expect(Array(overrides.providerOrder.prefix(2)) == ["gemini", "openai"])
+        #expect(overrides.allowCrossProviderFallback == false)
+        #expect(overrides.maxAttempts == 5)
+        #expect(overrides.failureThreshold == 3)
+        #expect(overrides.cooldownSeconds == 45)
+    }
+
+    @Test
+    @MainActor
+    func saveProviderCredentialAddsProviderToFailoverRotation() async {
+        let configuration = FloConfiguration.loadFromEnvironment([
+            "FLO_AI_PROVIDER_ORDER": "openai",
+            "FLO_OPENAI_API_KEY": "openai_key_1",
+            "FLO_CHATGPT_OAUTH_ENABLED": "false"
+        ])
+        let dependencies = TestDependencies(configuration: configuration)
+        let controller = FloController(environment: dependencies.environment)
+
+        controller.saveProviderCredential("openrouter_saved_1", for: .openrouter)
+
+        #expect(controller.configuredProviderOrder.contains(.openrouter))
+        #expect(dependencies.providerRoutingStore.overrides.providerOrder.contains("openrouter"))
+        #expect(dependencies.providerRoutingStore.overrides.allowedProviders?.contains("openrouter") == true)
+    }
+
+    @Test
+    @MainActor
+    func routingOverridePrimaryProviderChangesOAuthAvailability() {
+        let configuration = makeConfiguration(oauth: sampleOAuthConfiguration(), provider: .openai, geminiApiKey: "gemini_key_1")
+        let dependencies = TestDependencies(configuration: configuration)
+        dependencies.providerRoutingStore.overrides = ProviderRoutingOverrides(providerOrder: ["gemini", "openai"])
+
+        let controller = FloController(environment: dependencies.environment)
+
+        #expect(controller.authProviderDisplayName == "Gemini")
+        #expect(controller.activeProviderSupportsOAuth == false)
+        #expect(controller.canAttemptLogin == false)
     }
 
     @Test
@@ -444,6 +573,7 @@ private final class TestDependencies {
     let historyStore = MockHistoryStore()
     let dictationRewriteService = MockDictationRewriteService()
     let providerCredentialStore = MockProviderCredentialStore()
+    let providerRoutingStore = MockProviderRoutingStore()
     let dictationRewritePreferencesStore = MockDictationRewritePreferencesStore()
     let voicePreferencesStore = MockVoicePreferencesStore()
     let onboardingStateStore = MockOnboardingStateStore()
@@ -468,6 +598,7 @@ private final class TestDependencies {
             historyStore: historyStore,
             dictationRewriteService: dictationRewriteService,
             providerCredentialStore: providerCredentialStore,
+            providerRoutingStore: providerRoutingStore,
             dictationRewritePreferencesStore: dictationRewritePreferencesStore,
             voicePreferencesStore: voicePreferencesStore,
             onboardingStateStore: onboardingStateStore,
@@ -672,17 +803,55 @@ private final class MockDictationRewriteService: DictationRewriteService, @unche
 
 private final class MockProviderCredentialStore: ProviderCredentialStore {
     var credentials: [String: String] = [:]
+    var credentialPools: [String: [String]] = [:]
 
     func credential(for providerID: String) -> String? {
-        credentials[providerID]
+        credentialPools[providerID]?.first ?? credentials[providerID]
+    }
+
+    func credentials(for providerID: String) -> [String] {
+        if let pool = credentialPools[providerID] {
+            return pool
+        }
+        if let value = credentials[providerID] {
+            return [value]
+        }
+        return []
     }
 
     func saveCredential(_ credential: String, for providerID: String) throws {
         credentials[providerID] = credential
+        credentialPools[providerID] = [credential]
+    }
+
+    func saveCredentials(_ credentials: [String], for providerID: String) throws {
+        let normalized = credentials
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if normalized.isEmpty {
+            try clearCredential(for: providerID)
+            return
+        }
+
+        self.credentials[providerID] = normalized[0]
+        credentialPools[providerID] = normalized
     }
 
     func clearCredential(for providerID: String) throws {
         credentials.removeValue(forKey: providerID)
+        credentialPools.removeValue(forKey: providerID)
+    }
+}
+
+private final class MockProviderRoutingStore: ProviderRoutingStore {
+    var overrides: ProviderRoutingOverrides = .default
+
+    func loadOverrides() -> ProviderRoutingOverrides {
+        overrides
+    }
+
+    func saveOverrides(_ overrides: ProviderRoutingOverrides) {
+        self.overrides = overrides
     }
 }
 

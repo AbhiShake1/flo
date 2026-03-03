@@ -65,6 +65,40 @@ public protocol ProviderCredentialStore: AnyObject {
     func credential(for providerID: String) -> String?
     func saveCredential(_ credential: String, for providerID: String) throws
     func clearCredential(for providerID: String) throws
+    func credentials(for providerID: String) -> [String]
+    func saveCredentials(_ credentials: [String], for providerID: String) throws
+}
+
+public struct ProviderRoutingOverrides: Codable, Equatable, Sendable {
+    public let providerOrder: [String]
+    public let allowCrossProviderFallback: Bool?
+    public let maxAttempts: Int?
+    public let failureThreshold: Int?
+    public let cooldownSeconds: Int?
+    public let allowedProviders: [String]?
+
+    public init(
+        providerOrder: [String] = [],
+        allowCrossProviderFallback: Bool? = nil,
+        maxAttempts: Int? = nil,
+        failureThreshold: Int? = nil,
+        cooldownSeconds: Int? = nil,
+        allowedProviders: [String]? = nil
+    ) {
+        self.providerOrder = providerOrder
+        self.allowCrossProviderFallback = allowCrossProviderFallback
+        self.maxAttempts = maxAttempts
+        self.failureThreshold = failureThreshold
+        self.cooldownSeconds = cooldownSeconds
+        self.allowedProviders = allowedProviders
+    }
+
+    public static let `default` = ProviderRoutingOverrides()
+}
+
+public protocol ProviderRoutingStore: AnyObject {
+    func loadOverrides() -> ProviderRoutingOverrides
+    func saveOverrides(_ overrides: ProviderRoutingOverrides)
 }
 
 public protocol DictationRewritePreferencesStore: AnyObject {
@@ -167,4 +201,27 @@ public extension PermissionsService {
 
 public extension TTSService {
     func stopPlayback() {}
+}
+
+public extension ProviderCredentialStore {
+    func credentials(for providerID: String) -> [String] {
+        guard let value = credential(for: providerID)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty
+        else {
+            return []
+        }
+        return [value]
+    }
+
+    func saveCredentials(_ credentials: [String], for providerID: String) throws {
+        let normalized = credentials
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard let first = normalized.first else {
+            try clearCredential(for: providerID)
+            return
+        }
+        try saveCredential(first, for: providerID)
+    }
 }

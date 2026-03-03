@@ -28,7 +28,7 @@ public final class OpenAITTSService: NSObject, TTSService, @preconcurrency AVAud
 
     public func synthesizeAndPlay(text: String, authToken: String, voice: String, speed: Double) async throws {
         guard configuration.isAllowedHost(configuration.ttsURL) else {
-            throw FloError.network("Blocked host for TTS endpoint.")
+            throw FloError.network("Blocked host for \(configuration.provider.displayName) TTS endpoint.")
         }
 
         cancelRequested = false
@@ -55,10 +55,19 @@ public final class OpenAITTSService: NSObject, TTSService, @preconcurrency AVAud
 
             let (data, response) = try await urlSession.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse else {
-                throw FloError.network("Invalid TTS response")
+                throw ProviderRequestError.invalidResponse(
+                    provider: configuration.provider,
+                    operation: "tts",
+                    message: "Expected HTTP response."
+                )
             }
             guard (200..<300).contains(httpResponse.statusCode) else {
-                throw FloError.network(String(data: data, encoding: .utf8) ?? "TTS request failed")
+                throw ProviderRequestError.http(
+                    provider: configuration.provider,
+                    operation: "tts",
+                    statusCode: httpResponse.statusCode,
+                    message: String(data: data, encoding: .utf8) ?? "TTS request failed"
+                )
             }
 
             if case .normal = playbackMode {

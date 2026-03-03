@@ -1,0 +1,990 @@
+{
+  "generatedAt": "2026-03-03T10:19:41.815Z",
+  "providerCount": 97,
+  "totalModelCount": 3053,
+  "providers": [
+    {
+      "id": "302ai",
+      "name": "302.AI",
+      "env": [
+        "302AI_API_KEY"
+      ],
+      "modelCount": 64,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.302.ai/v1"
+    },
+    {
+      "id": "abacus",
+      "name": "Abacus",
+      "env": [
+        "ABACUS_API_KEY"
+      ],
+      "modelCount": 55,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://routellm.abacus.ai/v1"
+    },
+    {
+      "id": "aihubmix",
+      "name": "AIHubMix",
+      "env": [
+        "AIHUBMIX_API_KEY"
+      ],
+      "modelCount": 43,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://aihubmix.com/v1"
+    },
+    {
+      "id": "alibaba",
+      "name": "Alibaba",
+      "env": [
+        "DASHSCOPE_API_KEY"
+      ],
+      "modelCount": 41,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+    },
+    {
+      "id": "alibaba-cn",
+      "name": "Alibaba (China)",
+      "env": [
+        "DASHSCOPE_API_KEY"
+      ],
+      "modelCount": 65,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    },
+    {
+      "id": "amazon-bedrock",
+      "name": "Amazon Bedrock",
+      "env": [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_REGION"
+      ],
+      "modelCount": 95,
+      "npm": "@ai-sdk/amazon-bedrock",
+      "api": null
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "env": [
+        "ANTHROPIC_API_KEY"
+      ],
+      "modelCount": 23,
+      "npm": "@ai-sdk/anthropic",
+      "api": null
+    },
+    {
+      "id": "azure",
+      "name": "Azure",
+      "env": [
+        "AZURE_RESOURCE_NAME",
+        "AZURE_API_KEY"
+      ],
+      "modelCount": 96,
+      "npm": "@ai-sdk/azure",
+      "api": null
+    },
+    {
+      "id": "azure-cognitive-services",
+      "name": "Azure Cognitive Services",
+      "env": [
+        "AZURE_COGNITIVE_SERVICES_RESOURCE_NAME",
+        "AZURE_COGNITIVE_SERVICES_API_KEY"
+      ],
+      "modelCount": 95,
+      "npm": "@ai-sdk/azure",
+      "api": null
+    },
+    {
+      "id": "bailing",
+      "name": "Bailing",
+      "env": [
+        "BAILING_API_TOKEN"
+      ],
+      "modelCount": 2,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.tbox.cn/api/llm/v1/chat/completions"
+    },
+    {
+      "id": "baseten",
+      "name": "Baseten",
+      "env": [
+        "BASETEN_API_KEY"
+      ],
+      "modelCount": 9,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://inference.baseten.co/v1"
+    },
+    {
+      "id": "berget",
+      "name": "Berget.AI",
+      "env": [
+        "BERGET_API_KEY"
+      ],
+      "modelCount": 8,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.berget.ai/v1"
+    },
+    {
+      "id": "cerebras",
+      "name": "Cerebras",
+      "env": [
+        "CEREBRAS_API_KEY"
+      ],
+      "modelCount": 4,
+      "npm": "@ai-sdk/cerebras",
+      "api": null
+    },
+    {
+      "id": "chutes",
+      "name": "Chutes",
+      "env": [
+        "CHUTES_API_KEY"
+      ],
+      "modelCount": 67,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://llm.chutes.ai/v1"
+    },
+    {
+      "id": "cloudferro-sherlock",
+      "name": "CloudFerro Sherlock",
+      "env": [
+        "CLOUDFERRO_SHERLOCK_API_KEY"
+      ],
+      "modelCount": 4,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api-sherlock.cloudferro.com/openai/v1/"
+    },
+    {
+      "id": "cloudflare-ai-gateway",
+      "name": "Cloudflare AI Gateway",
+      "env": [
+        "CLOUDFLARE_API_TOKEN",
+        "CLOUDFLARE_ACCOUNT_ID",
+        "CLOUDFLARE_GATEWAY_ID"
+      ],
+      "modelCount": 68,
+      "npm": "ai-gateway-provider",
+      "api": null
+    },
+    {
+      "id": "cloudflare-workers-ai",
+      "name": "Cloudflare Workers AI",
+      "env": [
+        "CLOUDFLARE_ACCOUNT_ID",
+        "CLOUDFLARE_API_KEY"
+      ],
+      "modelCount": 39,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1"
+    },
+    {
+      "id": "cohere",
+      "name": "Cohere",
+      "env": [
+        "COHERE_API_KEY"
+      ],
+      "modelCount": 12,
+      "npm": "@ai-sdk/cohere",
+      "api": null
+    },
+    {
+      "id": "cortecs",
+      "name": "Cortecs",
+      "env": [
+        "CORTECS_API_KEY"
+      ],
+      "modelCount": 21,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.cortecs.ai/v1"
+    },
+    {
+      "id": "deepinfra",
+      "name": "Deep Infra",
+      "env": [
+        "DEEPINFRA_API_KEY"
+      ],
+      "modelCount": 16,
+      "npm": "@ai-sdk/deepinfra",
+      "api": null
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "env": [
+        "DEEPSEEK_API_KEY"
+      ],
+      "modelCount": 2,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.deepseek.com"
+    },
+    {
+      "id": "evroc",
+      "name": "evroc",
+      "env": [
+        "EVROC_API_KEY"
+      ],
+      "modelCount": 13,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://models.think.evroc.com/v1"
+    },
+    {
+      "id": "fastrouter",
+      "name": "FastRouter",
+      "env": [
+        "FASTROUTER_API_KEY"
+      ],
+      "modelCount": 14,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://go.fastrouter.ai/api/v1"
+    },
+    {
+      "id": "fireworks-ai",
+      "name": "Fireworks AI",
+      "env": [
+        "FIREWORKS_API_KEY"
+      ],
+      "modelCount": 13,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.fireworks.ai/inference/v1/"
+    },
+    {
+      "id": "firmware",
+      "name": "Firmware",
+      "env": [
+        "FIRMWARE_API_KEY"
+      ],
+      "modelCount": 16,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://app.firmware.ai/api/v1"
+    },
+    {
+      "id": "friendli",
+      "name": "Friendli",
+      "env": [
+        "FRIENDLI_TOKEN"
+      ],
+      "modelCount": 7,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.friendli.ai/serverless/v1"
+    },
+    {
+      "id": "github-copilot",
+      "name": "GitHub Copilot",
+      "env": [
+        "GITHUB_TOKEN"
+      ],
+      "modelCount": 22,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.githubcopilot.com"
+    },
+    {
+      "id": "github-models",
+      "name": "GitHub Models",
+      "env": [
+        "GITHUB_TOKEN"
+      ],
+      "modelCount": 55,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://models.github.ai/inference"
+    },
+    {
+      "id": "gitlab",
+      "name": "GitLab Duo",
+      "env": [
+        "GITLAB_TOKEN"
+      ],
+      "modelCount": 10,
+      "npm": "@gitlab/gitlab-ai-provider",
+      "api": null
+    },
+    {
+      "id": "google",
+      "name": "Google",
+      "env": [
+        "GOOGLE_GENERATIVE_AI_API_KEY",
+        "GEMINI_API_KEY"
+      ],
+      "modelCount": 28,
+      "npm": "@ai-sdk/google",
+      "api": null
+    },
+    {
+      "id": "google-vertex",
+      "name": "Vertex",
+      "env": [
+        "GOOGLE_VERTEX_PROJECT",
+        "GOOGLE_VERTEX_LOCATION",
+        "GOOGLE_APPLICATION_CREDENTIALS"
+      ],
+      "modelCount": 27,
+      "npm": "@ai-sdk/google-vertex",
+      "api": null
+    },
+    {
+      "id": "google-vertex-anthropic",
+      "name": "Vertex (Anthropic)",
+      "env": [
+        "GOOGLE_VERTEX_PROJECT",
+        "GOOGLE_VERTEX_LOCATION",
+        "GOOGLE_APPLICATION_CREDENTIALS"
+      ],
+      "modelCount": 11,
+      "npm": "@ai-sdk/google-vertex/anthropic",
+      "api": null
+    },
+    {
+      "id": "groq",
+      "name": "Groq",
+      "env": [
+        "GROQ_API_KEY"
+      ],
+      "modelCount": 17,
+      "npm": "@ai-sdk/groq",
+      "api": null
+    },
+    {
+      "id": "helicone",
+      "name": "Helicone",
+      "env": [
+        "HELICONE_API_KEY"
+      ],
+      "modelCount": 91,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://ai-gateway.helicone.ai/v1"
+    },
+    {
+      "id": "huggingface",
+      "name": "Hugging Face",
+      "env": [
+        "HF_TOKEN"
+      ],
+      "modelCount": 20,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://router.huggingface.co/v1"
+    },
+    {
+      "id": "iflowcn",
+      "name": "iFlow",
+      "env": [
+        "IFLOW_API_KEY"
+      ],
+      "modelCount": 14,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://apis.iflow.cn/v1"
+    },
+    {
+      "id": "inception",
+      "name": "Inception",
+      "env": [
+        "INCEPTION_API_KEY"
+      ],
+      "modelCount": 2,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.inceptionlabs.ai/v1/"
+    },
+    {
+      "id": "inference",
+      "name": "Inference",
+      "env": [
+        "INFERENCE_API_KEY"
+      ],
+      "modelCount": 9,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://inference.net/v1"
+    },
+    {
+      "id": "io-net",
+      "name": "IO.NET",
+      "env": [
+        "IOINTELLIGENCE_API_KEY"
+      ],
+      "modelCount": 17,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.intelligence.io.solutions/api/v1"
+    },
+    {
+      "id": "jiekou",
+      "name": "Jiekou.AI",
+      "env": [
+        "JIEKOU_API_KEY"
+      ],
+      "modelCount": 61,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.jiekou.ai/openai"
+    },
+    {
+      "id": "kilo",
+      "name": "Kilo Gateway",
+      "env": [
+        "KILO_API_KEY"
+      ],
+      "modelCount": 263,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.kilo.ai/api/gateway"
+    },
+    {
+      "id": "kimi-for-coding",
+      "name": "Kimi For Coding",
+      "env": [
+        "KIMI_API_KEY"
+      ],
+      "modelCount": 2,
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://api.kimi.com/coding/v1"
+    },
+    {
+      "id": "kuae-cloud-coding-plan",
+      "name": "KUAE Cloud Coding Plan",
+      "env": [
+        "KUAE_API_KEY"
+      ],
+      "modelCount": 1,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://coding-plan-endpoint.kuaecloud.net/v1"
+    },
+    {
+      "id": "llama",
+      "name": "Llama",
+      "env": [
+        "LLAMA_API_KEY"
+      ],
+      "modelCount": 7,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.llama.com/compat/v1/"
+    },
+    {
+      "id": "lmstudio",
+      "name": "LMStudio",
+      "env": [
+        "LMSTUDIO_API_KEY"
+      ],
+      "modelCount": 3,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "http://127.0.0.1:1234/v1"
+    },
+    {
+      "id": "lucidquery",
+      "name": "LucidQuery AI",
+      "env": [
+        "LUCIDQUERY_API_KEY"
+      ],
+      "modelCount": 2,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://lucidquery.com/api/v1"
+    },
+    {
+      "id": "meganova",
+      "name": "Meganova",
+      "env": [
+        "MEGANOVA_API_KEY"
+      ],
+      "modelCount": 19,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.meganova.ai/v1"
+    },
+    {
+      "id": "minimax",
+      "name": "MiniMax (minimax.io)",
+      "env": [
+        "MINIMAX_API_KEY"
+      ],
+      "modelCount": 4,
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://api.minimax.io/anthropic/v1"
+    },
+    {
+      "id": "minimax-cn",
+      "name": "MiniMax (minimaxi.com)",
+      "env": [
+        "MINIMAX_API_KEY"
+      ],
+      "modelCount": 4,
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://api.minimaxi.com/anthropic/v1"
+    },
+    {
+      "id": "minimax-cn-coding-plan",
+      "name": "MiniMax Coding Plan (minimaxi.com)",
+      "env": [
+        "MINIMAX_API_KEY"
+      ],
+      "modelCount": 4,
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://api.minimaxi.com/anthropic/v1"
+    },
+    {
+      "id": "minimax-coding-plan",
+      "name": "MiniMax Coding Plan (minimax.io)",
+      "env": [
+        "MINIMAX_API_KEY"
+      ],
+      "modelCount": 4,
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://api.minimax.io/anthropic/v1"
+    },
+    {
+      "id": "mistral",
+      "name": "Mistral",
+      "env": [
+        "MISTRAL_API_KEY"
+      ],
+      "modelCount": 26,
+      "npm": "@ai-sdk/mistral",
+      "api": null
+    },
+    {
+      "id": "moark",
+      "name": "Moark",
+      "env": [
+        "MOARK_API_KEY"
+      ],
+      "modelCount": 2,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://moark.com/v1"
+    },
+    {
+      "id": "modelscope",
+      "name": "ModelScope",
+      "env": [
+        "MODELSCOPE_API_KEY"
+      ],
+      "modelCount": 7,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api-inference.modelscope.cn/v1"
+    },
+    {
+      "id": "moonshotai",
+      "name": "Moonshot AI",
+      "env": [
+        "MOONSHOT_API_KEY"
+      ],
+      "modelCount": 6,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.moonshot.ai/v1"
+    },
+    {
+      "id": "moonshotai-cn",
+      "name": "Moonshot AI (China)",
+      "env": [
+        "MOONSHOT_API_KEY"
+      ],
+      "modelCount": 6,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.moonshot.cn/v1"
+    },
+    {
+      "id": "morph",
+      "name": "Morph",
+      "env": [
+        "MORPH_API_KEY"
+      ],
+      "modelCount": 3,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.morphllm.com/v1"
+    },
+    {
+      "id": "nano-gpt",
+      "name": "NanoGPT",
+      "env": [
+        "NANO_GPT_API_KEY"
+      ],
+      "modelCount": 33,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://nano-gpt.com/api/v1"
+    },
+    {
+      "id": "nebius",
+      "name": "Nebius Token Factory",
+      "env": [
+        "NEBIUS_API_KEY"
+      ],
+      "modelCount": 46,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.tokenfactory.nebius.com/v1"
+    },
+    {
+      "id": "nova",
+      "name": "Nova",
+      "env": [
+        "NOVA_API_KEY"
+      ],
+      "modelCount": 2,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.nova.amazon.com/v1"
+    },
+    {
+      "id": "novita-ai",
+      "name": "NovitaAI",
+      "env": [
+        "NOVITA_API_KEY"
+      ],
+      "modelCount": 84,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.novita.ai/openai"
+    },
+    {
+      "id": "nvidia",
+      "name": "Nvidia",
+      "env": [
+        "NVIDIA_API_KEY"
+      ],
+      "modelCount": 71,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://integrate.api.nvidia.com/v1"
+    },
+    {
+      "id": "ollama-cloud",
+      "name": "Ollama Cloud",
+      "env": [
+        "OLLAMA_API_KEY"
+      ],
+      "modelCount": 33,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://ollama.com/v1"
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "env": [
+        "OPENAI_API_KEY"
+      ],
+      "modelCount": 42,
+      "npm": "@ai-sdk/openai",
+      "api": null
+    },
+    {
+      "id": "opencode",
+      "name": "OpenCode Zen",
+      "env": [
+        "OPENCODE_API_KEY"
+      ],
+      "modelCount": 38,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://opencode.ai/zen/v1"
+    },
+    {
+      "id": "opencode-go",
+      "name": "OpenCode Go",
+      "env": [
+        "OPENCODE_API_KEY"
+      ],
+      "modelCount": 3,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://opencode.ai/zen/go/v1"
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "env": [
+        "OPENROUTER_API_KEY"
+      ],
+      "modelCount": 186,
+      "npm": "@openrouter/ai-sdk-provider",
+      "api": "https://openrouter.ai/api/v1"
+    },
+    {
+      "id": "ovhcloud",
+      "name": "OVHcloud AI Endpoints",
+      "env": [
+        "OVHCLOUD_API_KEY"
+      ],
+      "modelCount": 13,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1"
+    },
+    {
+      "id": "perplexity",
+      "name": "Perplexity",
+      "env": [
+        "PERPLEXITY_API_KEY"
+      ],
+      "modelCount": 4,
+      "npm": "@ai-sdk/perplexity",
+      "api": null
+    },
+    {
+      "id": "poe",
+      "name": "Poe",
+      "env": [
+        "POE_API_KEY"
+      ],
+      "modelCount": 114,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.poe.com/v1"
+    },
+    {
+      "id": "privatemode-ai",
+      "name": "Privatemode AI",
+      "env": [
+        "PRIVATEMODE_API_KEY",
+        "PRIVATEMODE_ENDPOINT"
+      ],
+      "modelCount": 5,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "http://localhost:8080/v1"
+    },
+    {
+      "id": "qihang-ai",
+      "name": "QiHang",
+      "env": [
+        "QIHANG_API_KEY"
+      ],
+      "modelCount": 9,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.qhaigc.net/v1"
+    },
+    {
+      "id": "qiniu-ai",
+      "name": "Qiniu",
+      "env": [
+        "Qiniu_API_KEY"
+      ],
+      "modelCount": 76,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.qnaigc.com.com/v1"
+    },
+    {
+      "id": "requesty",
+      "name": "Requesty",
+      "env": [
+        "REQUESTY_API_KEY"
+      ],
+      "modelCount": 20,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://router.requesty.ai/v1"
+    },
+    {
+      "id": "sap-ai-core",
+      "name": "SAP AI Core",
+      "env": [
+        "AICORE_SERVICE_KEY"
+      ],
+      "modelCount": 22,
+      "npm": "@jerome-benoit/sap-ai-provider-v2",
+      "api": null
+    },
+    {
+      "id": "scaleway",
+      "name": "Scaleway",
+      "env": [
+        "SCALEWAY_API_KEY"
+      ],
+      "modelCount": 14,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.scaleway.ai/v1"
+    },
+    {
+      "id": "siliconflow",
+      "name": "SiliconFlow",
+      "env": [
+        "SILICONFLOW_API_KEY"
+      ],
+      "modelCount": 70,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.siliconflow.com/v1"
+    },
+    {
+      "id": "siliconflow-cn",
+      "name": "SiliconFlow (China)",
+      "env": [
+        "SILICONFLOW_CN_API_KEY"
+      ],
+      "modelCount": 72,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.siliconflow.cn/v1"
+    },
+    {
+      "id": "stackit",
+      "name": "STACKIT",
+      "env": [
+        "STACKIT_API_KEY"
+      ],
+      "modelCount": 8,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.openai-compat.model-serving.eu01.onstackit.cloud/v1"
+    },
+    {
+      "id": "stepfun",
+      "name": "StepFun",
+      "env": [
+        "STEPFUN_API_KEY"
+      ],
+      "modelCount": 3,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.stepfun.com/v1"
+    },
+    {
+      "id": "submodel",
+      "name": "submodel",
+      "env": [
+        "SUBMODEL_INSTAGEN_ACCESS_KEY"
+      ],
+      "modelCount": 9,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://llm.submodel.ai/v1"
+    },
+    {
+      "id": "synthetic",
+      "name": "Synthetic",
+      "env": [
+        "SYNTHETIC_API_KEY"
+      ],
+      "modelCount": 26,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.synthetic.new/v1"
+    },
+    {
+      "id": "togetherai",
+      "name": "Together AI",
+      "env": [
+        "TOGETHER_API_KEY"
+      ],
+      "modelCount": 19,
+      "npm": "@ai-sdk/togetherai",
+      "api": null
+    },
+    {
+      "id": "upstage",
+      "name": "Upstage",
+      "env": [
+        "UPSTAGE_API_KEY"
+      ],
+      "modelCount": 3,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.upstage.ai/v1/solar"
+    },
+    {
+      "id": "v0",
+      "name": "v0",
+      "env": [
+        "V0_API_KEY"
+      ],
+      "modelCount": 3,
+      "npm": "@ai-sdk/vercel",
+      "api": null
+    },
+    {
+      "id": "venice",
+      "name": "Venice AI",
+      "env": [
+        "VENICE_API_KEY"
+      ],
+      "modelCount": 36,
+      "npm": "venice-ai-sdk-provider",
+      "api": null
+    },
+    {
+      "id": "vercel",
+      "name": "Vercel AI Gateway",
+      "env": [
+        "AI_GATEWAY_API_KEY"
+      ],
+      "modelCount": 200,
+      "npm": "@ai-sdk/gateway",
+      "api": null
+    },
+    {
+      "id": "vivgrid",
+      "name": "Vivgrid",
+      "env": [
+        "VIVGRID_API_KEY"
+      ],
+      "modelCount": 8,
+      "npm": "@ai-sdk/openai",
+      "api": "https://api.vivgrid.com/v1"
+    },
+    {
+      "id": "vultr",
+      "name": "Vultr",
+      "env": [
+        "VULTR_API_KEY"
+      ],
+      "modelCount": 5,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.vultrinference.com/v1"
+    },
+    {
+      "id": "wandb",
+      "name": "Weights & Biases",
+      "env": [
+        "WANDB_API_KEY"
+      ],
+      "modelCount": 10,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.inference.wandb.ai/v1"
+    },
+    {
+      "id": "xai",
+      "name": "xAI",
+      "env": [
+        "XAI_API_KEY"
+      ],
+      "modelCount": 22,
+      "npm": "@ai-sdk/xai",
+      "api": null
+    },
+    {
+      "id": "xiaomi",
+      "name": "Xiaomi",
+      "env": [
+        "XIAOMI_API_KEY"
+      ],
+      "modelCount": 1,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.xiaomimimo.com/v1"
+    },
+    {
+      "id": "zai",
+      "name": "Z.AI",
+      "env": [
+        "ZHIPU_API_KEY"
+      ],
+      "modelCount": 9,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.z.ai/api/paas/v4"
+    },
+    {
+      "id": "zai-coding-plan",
+      "name": "Z.AI Coding Plan",
+      "env": [
+        "ZHIPU_API_KEY"
+      ],
+      "modelCount": 10,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://api.z.ai/api/coding/paas/v4"
+    },
+    {
+      "id": "zenmux",
+      "name": "ZenMux",
+      "env": [
+        "ZENMUX_API_KEY"
+      ],
+      "modelCount": 67,
+      "npm": "@ai-sdk/anthropic",
+      "api": "https://zenmux.ai/api/anthropic/v1"
+    },
+    {
+      "id": "zhipuai",
+      "name": "Zhipu AI",
+      "env": [
+        "ZHIPU_API_KEY"
+      ],
+      "modelCount": 9,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://open.bigmodel.cn/api/paas/v4"
+    },
+    {
+      "id": "zhipuai-coding-plan",
+      "name": "Zhipu AI Coding Plan",
+      "env": [
+        "ZHIPU_API_KEY"
+      ],
+      "modelCount": 9,
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://open.bigmodel.cn/api/coding/paas/v4"
+    }
+  ]
+}

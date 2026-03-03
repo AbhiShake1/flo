@@ -29,7 +29,7 @@ public final class GeminiTranscriptionService: TranscriptionService, @unchecked 
 
     public func transcribe(audioFileURL: URL, authToken: String) async throws -> TranscriptResult {
         guard configuration.isAllowedHost(configuration.transcriptionURL) else {
-            throw FloError.network("Blocked host for Gemini transcription endpoint.")
+            throw FloError.network("Blocked host for \(configuration.provider.displayName) transcription endpoint.")
         }
 
         let mimeType = audioFileURL.pathExtension.lowercased() == "wav" ? "audio/wav" : "audio/mp4"
@@ -68,10 +68,19 @@ public final class GeminiTranscriptionService: TranscriptionService, @unchecked 
 
         let (data, response) = try await urlSession.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw FloError.network("Invalid Gemini transcription response")
+            throw ProviderRequestError.invalidResponse(
+                provider: configuration.provider,
+                operation: "transcription",
+                message: "Expected HTTP response."
+            )
         }
         guard (200..<300).contains(httpResponse.statusCode) else {
-            throw FloError.network(String(data: data, encoding: .utf8) ?? "Gemini transcription request failed")
+            throw ProviderRequestError.http(
+                provider: configuration.provider,
+                operation: "transcription",
+                statusCode: httpResponse.statusCode,
+                message: String(data: data, encoding: .utf8) ?? "\(configuration.provider.displayName) transcription request failed"
+            )
         }
 
         let decoded = try JSONDecoder().decode(ResponsePayload.self, from: data)

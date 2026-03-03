@@ -25,12 +25,10 @@ public enum VoiceCatalog {
     ]
 
     public static func supportedVoices(for provider: AIProvider) -> [String] {
-        switch provider {
-        case .openai:
-            return openAISupportedVoices
-        case .gemini:
+        if provider == .gemini || provider == .google {
             return geminiSupportedVoices
         }
+        return openAISupportedVoices
     }
 
     public static let speedRange: ClosedRange<Double> = 0.25...4.0

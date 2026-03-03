@@ -15,6 +15,7 @@ public struct AppEnvironment {
     public let historyStore: SessionHistoryStore
     public let dictationRewriteService: DictationRewriteService
     public let providerCredentialStore: ProviderCredentialStore
+    public let providerRoutingStore: ProviderRoutingStore
     public let dictationRewritePreferencesStore: DictationRewritePreferencesStore
     public let voicePreferencesStore: VoicePreferencesStore
     public let onboardingStateStore: OnboardingStateStore
@@ -35,6 +36,7 @@ public struct AppEnvironment {
         historyStore: SessionHistoryStore,
         dictationRewriteService: DictationRewriteService,
         providerCredentialStore: ProviderCredentialStore,
+        providerRoutingStore: ProviderRoutingStore,
         dictationRewritePreferencesStore: DictationRewritePreferencesStore,
         voicePreferencesStore: VoicePreferencesStore,
         onboardingStateStore: OnboardingStateStore,
@@ -54,6 +56,7 @@ public struct AppEnvironment {
         self.historyStore = historyStore
         self.dictationRewriteService = dictationRewriteService
         self.providerCredentialStore = providerCredentialStore
+        self.providerRoutingStore = providerRoutingStore
         self.dictationRewritePreferencesStore = dictationRewritePreferencesStore
         self.voicePreferencesStore = voicePreferencesStore
         self.onboardingStateStore = onboardingStateStore
@@ -69,25 +72,40 @@ public extension AppEnvironment {
         configuration: FloConfiguration = .loadFromEnvironment(LocalEnvLoader.mergedEnvironment()),
         floatingBarEnabled: Bool = true
     ) -> AppEnvironment {
-        let floatingBarManager: FloatingBarManaging = floatingBarEnabled ? FloatingBarWindowManager() : NoopFloatingBarManager()
-        let transcriptionService: TranscriptionService
-        let ttsService: TTSService
-        let dictationRewriteService: DictationRewriteService
-
-        switch configuration.provider {
-        case .openai:
-            transcriptionService = OpenAITranscriptionService(configuration: configuration)
-            ttsService = OpenAITTSService(configuration: configuration)
-            dictationRewriteService = NoopDictationRewriteService()
-        case .gemini:
-            transcriptionService = GeminiTranscriptionService(configuration: configuration)
-            ttsService = GeminiTTSService(configuration: configuration)
-            dictationRewriteService = GeminiDictationRewriteService(configuration: configuration)
+        let providerCredentialStore = KeychainProviderCredentialStore()
+        let providerRoutingStore = UserDefaultsProviderRoutingStore()
+        var resolvedConfiguration = configuration
+        for provider in AIProvider.allCases {
+            let savedPool = providerCredentialStore.credentials(for: provider.rawValue)
+            if !savedPool.isEmpty {
+                resolvedConfiguration = resolvedConfiguration.withCredentialPool(
+                    savedPool + resolvedConfiguration.credentials(for: provider),
+                    for: provider
+                )
+            }
         }
+        resolvedConfiguration = resolvedConfiguration.applyingRoutingOverrides(providerRoutingStore.loadOverrides())
+
+        let floatingBarManager: FloatingBarManaging = floatingBarEnabled ? FloatingBarWindowManager() : NoopFloatingBarManager()
+        let transcriptionService = FailoverTranscriptionService(
+            configuration: resolvedConfiguration,
+            credentialStore: providerCredentialStore,
+            routingStore: providerRoutingStore
+        )
+        let ttsService = FailoverTTSService(
+            configuration: resolvedConfiguration,
+            credentialStore: providerCredentialStore,
+            routingStore: providerRoutingStore
+        )
+        let dictationRewriteService = FailoverDictationRewriteService(
+            configuration: resolvedConfiguration,
+            credentialStore: providerCredentialStore,
+            routingStore: providerRoutingStore
+        )
 
         return AppEnvironment(
-            configuration: configuration,
-            authService: ChatGPTOAuthService(configuration: configuration.oauth),
+            configuration: resolvedConfiguration,
+            authService: ChatGPTOAuthService(configuration: resolvedConfiguration.oauth),
             shortcutStore: UserDefaultsShortcutStore(),
             hotkeyManager: GlobalHotkeyManager(),
             speechCaptureService: AVAudioEngineCaptureService(),
@@ -97,10 +115,11 @@ public extension AppEnvironment {
             ttsService: ttsService,
             historyStore: SecureSessionHistoryStore(),
             dictationRewriteService: dictationRewriteService,
-            providerCredentialStore: KeychainProviderCredentialStore(),
+            providerCredentialStore: providerCredentialStore,
+            providerRoutingStore: providerRoutingStore,
             dictationRewritePreferencesStore: UserDefaultsDictationRewritePreferencesStore(),
             voicePreferencesStore: UserDefaultsVoicePreferencesStore(
-                fallback: VoicePreferences(voice: configuration.ttsVoice, speed: configuration.ttsSpeed)
+                fallback: VoicePreferences(voice: resolvedConfiguration.ttsVoice, speed: resolvedConfiguration.ttsSpeed)
             ),
             onboardingStateStore: UserDefaultsOnboardingStateStore(),
             permissionsService: MacPermissionsService(),

@@ -2,6 +2,7 @@ import AppCore
 import AppKit
 import Combine
 import Foundation
+import Infrastructure
 
 @MainActor
 public final class FloController: ObservableObject {
@@ -20,6 +21,7 @@ public final class FloController: ObservableObject {
     @Published public private(set) var usesSavedProviderCredential = false
     @Published public private(set) var liveDictationEnabled: Bool
     @Published public private(set) var liveTranscriptPreview: String = ""
+    @Published public private(set) var providerRoutingOverrides: ProviderRoutingOverrides
     @Published public var statusMessage: String?
 
     public var isAuthenticated: Bool {
@@ -33,18 +35,34 @@ public final class FloController: ObservableObject {
         if hasLocalCredential {
             return false
         }
-        if environment.configuration.provider == .gemini {
+        if !activeProviderSupportsOAuth {
             return false
         }
-        return oauthBlockerMessage == nil
+        return effectiveConfiguration.oauth != nil && oauthBlockerMessage == nil
     }
 
     public var authProviderDisplayName: String {
-        environment.configuration.providerDisplayName
+        effectiveConfiguration.providerDisplayName
+    }
+
+    public var availableProviders: [AIProvider] {
+        AIProvider.allCases
+    }
+
+    public var configuredProviderOrder: [AIProvider] {
+        effectiveProviderOrder
+    }
+
+    public var activeProviderSupportsOAuth: Bool {
+        effectiveConfiguration.provider.supportsOAuth
+    }
+
+    public var providerCredentialEnvironmentHint: String {
+        localCredentialEnvVarName
     }
 
     public var supportedVoices: [String] {
-        VoiceCatalog.supportedVoices(for: environment.configuration.provider)
+        VoiceCatalog.supportedVoices(for: voicePreferenceProvider)
     }
 
     public var featureFlags: FeatureFlags {
@@ -90,21 +108,258 @@ public final class FloController: ObservableObject {
     }
 
     public var providerCredentialSourceLabel: String? {
-        switch activeLocalCredential?.source {
-        case .keychain:
-            return "Saved in app keychain"
-        case .environment:
-            return "Loaded from \(localCredentialEnvVarName)"
-        case .none:
-            return nil
-        }
+        providerCredentialSourceLabel(for: effectiveConfiguration.provider)
     }
 
     public var canRemoveSavedProviderCredential: Bool {
-        guard let source = activeLocalCredential?.source else {
+        canRemoveSavedProviderCredential(for: effectiveConfiguration.provider)
+    }
+
+    public var failoverAllowCrossProviderFallback: Bool {
+        effectiveFailoverPolicy.allowCrossProviderFallback
+    }
+
+    public var failoverMaxAttempts: Int {
+        effectiveFailoverPolicy.maxAttempts
+    }
+
+    public var failoverFailureThreshold: Int {
+        effectiveFailoverPolicy.failureThreshold
+    }
+
+    public var failoverCooldownSeconds: Int {
+        effectiveFailoverPolicy.cooldownSeconds
+    }
+
+    public func providerDisplayName(for provider: AIProvider) -> String {
+        provider.displayName
+    }
+
+    public func providerSupportsOAuth(_ provider: AIProvider) -> Bool {
+        provider.supportsOAuth
+    }
+
+    public func providerCredentialEnvironmentHint(for provider: AIProvider) -> String {
+        provider.defaultEnvKeyName
+    }
+
+    public func providerCredentialSourceLabel(for provider: AIProvider) -> String? {
+        let savedCount = savedCredentialTokens(for: provider).count
+        if savedCount > 0 {
+            if savedCount == 1 {
+                return "Saved in app keychain"
+            }
+            return "Saved in app keychain (\(savedCount) keys)"
+        }
+
+        if !environmentCredentialTokens(for: provider).isEmpty {
+            return "Loaded from \(provider.defaultEnvKeyName)"
+        }
+
+        return nil
+    }
+
+    public func canRemoveSavedProviderCredential(for provider: AIProvider) -> Bool {
+        !savedCredentialTokens(for: provider).isEmpty
+    }
+
+    public func configuredKeyCount(for provider: AIProvider) -> Int {
+        mergedCredentialTokens(for: provider).count
+    }
+
+    public func providerSupportsFailoverOperation(_ provider: AIProvider) -> Bool {
+        effectiveConfiguration.supportsTranscription(for: provider)
+            || effectiveConfiguration.supportsTTS(for: provider)
+            || effectiveConfiguration.supportsRewrite(for: provider)
+    }
+
+    public func providerEnabledForFailover(_ provider: AIProvider) -> Bool {
+        guard effectiveProviderOrder.contains(provider) else {
             return false
         }
-        return source == .keychain
+        guard let allowed = effectiveFailoverPolicy.allowedProviders else {
+            return true
+        }
+        return allowed.contains(provider)
+    }
+
+    public func canMoveProviderUpInFailoverOrder(_ provider: AIProvider) -> Bool {
+        guard let index = effectiveProviderOrder.firstIndex(of: provider) else {
+            return false
+        }
+        return index > 0
+    }
+
+    public func canMoveProviderDownInFailoverOrder(_ provider: AIProvider) -> Bool {
+        guard let index = effectiveProviderOrder.firstIndex(of: provider) else {
+            return false
+        }
+        return index < effectiveProviderOrder.count - 1
+    }
+
+    public func moveProviderUpInFailoverOrder(_ provider: AIProvider) {
+        moveProviderInFailoverOrder(provider, direction: -1)
+    }
+
+    public func moveProviderDownInFailoverOrder(_ provider: AIProvider) {
+        moveProviderInFailoverOrder(provider, direction: 1)
+    }
+
+    public func setProviderEnabledInFailover(_ provider: AIProvider, enabled: Bool) {
+        var order = effectiveProviderOrder
+        if !order.contains(provider) {
+            order.append(provider)
+        }
+
+        var allowed = effectiveFailoverPolicy.allowedProviders ?? Set(order)
+        if enabled {
+            allowed.insert(provider)
+        } else {
+            allowed.remove(provider)
+            if allowed.isEmpty, let primary = order.first {
+                allowed.insert(primary)
+            }
+        }
+
+        persistRoutingOverrides(
+            updating: { current in
+                ProviderRoutingOverrides(
+                    providerOrder: order.map(\.rawValue),
+                    allowCrossProviderFallback: current.allowCrossProviderFallback,
+                    maxAttempts: current.maxAttempts,
+                    failureThreshold: current.failureThreshold,
+                    cooldownSeconds: current.cooldownSeconds,
+                    allowedProviders: Array(allowed).map(\.rawValue).sorted()
+                )
+            },
+            statusMessage: enabled
+                ? "\(provider.displayName) enabled in failover rotation."
+                : "\(provider.displayName) disabled in failover rotation."
+        )
+    }
+
+    public func setFailoverAllowCrossProviderFallback(_ enabled: Bool) {
+        persistRoutingOverrides(
+            updating: { current in
+                ProviderRoutingOverrides(
+                    providerOrder: current.providerOrder,
+                    allowCrossProviderFallback: enabled,
+                    maxAttempts: current.maxAttempts,
+                    failureThreshold: current.failureThreshold,
+                    cooldownSeconds: current.cooldownSeconds,
+                    allowedProviders: current.allowedProviders
+                )
+            },
+            statusMessage: enabled
+                ? "Cross-provider failover enabled."
+                : "Cross-provider failover disabled."
+        )
+    }
+
+    public func setFailoverMaxAttempts(_ value: Int) {
+        let clamped = max(1, min(Self.maxFailoverAttempts, value))
+        persistRoutingOverrides(
+            updating: { current in
+                ProviderRoutingOverrides(
+                    providerOrder: current.providerOrder,
+                    allowCrossProviderFallback: current.allowCrossProviderFallback,
+                    maxAttempts: clamped,
+                    failureThreshold: current.failureThreshold,
+                    cooldownSeconds: current.cooldownSeconds,
+                    allowedProviders: current.allowedProviders
+                )
+            },
+            statusMessage: "Failover max attempts set to \(clamped)."
+        )
+    }
+
+    public func setFailoverFailureThreshold(_ value: Int) {
+        let clamped = max(1, min(Self.maxFailoverFailureThreshold, value))
+        persistRoutingOverrides(
+            updating: { current in
+                ProviderRoutingOverrides(
+                    providerOrder: current.providerOrder,
+                    allowCrossProviderFallback: current.allowCrossProviderFallback,
+                    maxAttempts: current.maxAttempts,
+                    failureThreshold: clamped,
+                    cooldownSeconds: current.cooldownSeconds,
+                    allowedProviders: current.allowedProviders
+                )
+            },
+            statusMessage: "Provider failure threshold set to \(clamped)."
+        )
+    }
+
+    public func setFailoverCooldownSeconds(_ value: Int) {
+        let clamped = max(0, min(Self.maxFailoverCooldownSeconds, value))
+        persistRoutingOverrides(
+            updating: { current in
+                ProviderRoutingOverrides(
+                    providerOrder: current.providerOrder,
+                    allowCrossProviderFallback: current.allowCrossProviderFallback,
+                    maxAttempts: current.maxAttempts,
+                    failureThreshold: current.failureThreshold,
+                    cooldownSeconds: clamped,
+                    allowedProviders: current.allowedProviders
+                )
+            },
+            statusMessage: "Provider cooldown set to \(clamped)s."
+        )
+    }
+
+    private func moveProviderInFailoverOrder(_ provider: AIProvider, direction: Int) {
+        guard direction == -1 || direction == 1 else {
+            return
+        }
+
+        var order = effectiveProviderOrder
+        guard let index = order.firstIndex(of: provider) else {
+            return
+        }
+
+        let targetIndex = index + direction
+        guard order.indices.contains(targetIndex) else {
+            return
+        }
+
+        order.swapAt(index, targetIndex)
+        persistRoutingOverrides(
+            updating: { current in
+                ProviderRoutingOverrides(
+                    providerOrder: order.map(\.rawValue),
+                    allowCrossProviderFallback: current.allowCrossProviderFallback,
+                    maxAttempts: current.maxAttempts,
+                    failureThreshold: current.failureThreshold,
+                    cooldownSeconds: current.cooldownSeconds,
+                    allowedProviders: current.allowedProviders
+                )
+            },
+            statusMessage: "Moved \(provider.displayName) in failover order."
+        )
+    }
+
+    private func includeProviderInFailoverRotation(_ provider: AIProvider) {
+        var order = effectiveProviderOrder
+        if !order.contains(provider) {
+            order.append(provider)
+        }
+
+        var allowed = effectiveFailoverPolicy.allowedProviders ?? Set(order)
+        allowed.insert(provider)
+
+        persistRoutingOverrides(
+            updating: { current in
+                ProviderRoutingOverrides(
+                    providerOrder: order.map(\.rawValue),
+                    allowCrossProviderFallback: current.allowCrossProviderFallback,
+                    maxAttempts: current.maxAttempts,
+                    failureThreshold: current.failureThreshold,
+                    cooldownSeconds: current.cooldownSeconds,
+                    allowedProviders: Array(allowed).map(\.rawValue).sorted()
+                )
+            },
+            statusMessage: nil
+        )
     }
 
     private let environment: AppEnvironment
@@ -118,16 +373,103 @@ public final class FloController: ObservableObject {
         case environment
     }
     private static let liveDictationUserDefaultsKey = "flo.live_dictation_enabled"
+    private static let maxFailoverAttempts = 20
+    private static let maxFailoverFailureThreshold = 10
+    private static let maxFailoverCooldownSeconds = 900
+
+    private var effectiveConfiguration: FloConfiguration {
+        environment.configuration.applyingRoutingOverrides(providerRoutingOverrides)
+    }
+
+    private var effectiveFailoverPolicy: ProviderFailoverPolicy {
+        effectiveConfiguration.failoverPolicy
+    }
+
+    private func parsedOverrideProviders(from ids: [String]) -> [AIProvider] {
+        var seen = Set<AIProvider>()
+        var providers: [AIProvider] = []
+        for id in ids {
+            guard let provider = AIProvider(rawValue: id), seen.insert(provider).inserted else {
+                continue
+            }
+            providers.append(provider)
+        }
+        return providers
+    }
+
+    private func sanitizedRoutingOverrides(_ overrides: ProviderRoutingOverrides) -> ProviderRoutingOverrides {
+        let normalizedOrder = parsedOverrideProviders(from: overrides.providerOrder)
+        let normalizedAllowedProviders: [String]? = {
+            guard let raw = overrides.allowedProviders else {
+                return nil
+            }
+            let parsed = parsedOverrideProviders(from: raw)
+            if parsed.isEmpty {
+                return nil
+            }
+            return parsed.map(\.rawValue).sorted()
+        }()
+
+        let maxAttempts = overrides.maxAttempts.map { max(1, min(Self.maxFailoverAttempts, $0)) }
+        let failureThreshold = overrides.failureThreshold.map { max(1, min(Self.maxFailoverFailureThreshold, $0)) }
+        let cooldownSeconds = overrides.cooldownSeconds.map { max(0, min(Self.maxFailoverCooldownSeconds, $0)) }
+
+        return ProviderRoutingOverrides(
+            providerOrder: normalizedOrder.map(\.rawValue),
+            allowCrossProviderFallback: overrides.allowCrossProviderFallback,
+            maxAttempts: maxAttempts,
+            failureThreshold: failureThreshold,
+            cooldownSeconds: cooldownSeconds,
+            allowedProviders: normalizedAllowedProviders
+        )
+    }
+
+    private func persistRoutingOverrides(
+        updating transform: (ProviderRoutingOverrides) -> ProviderRoutingOverrides,
+        statusMessage: String?
+    ) {
+        let next = sanitizedRoutingOverrides(transform(providerRoutingOverrides))
+        providerRoutingOverrides = next
+        environment.providerRoutingStore.saveOverrides(next)
+        if let statusMessage {
+            self.statusMessage = statusMessage
+        }
+        environment.logger.info("Updated provider routing overrides.")
+    }
+
+    private func savedCredentialTokens(for provider: AIProvider) -> [String] {
+        environment.providerCredentialStore
+            .credentials(for: provider.rawValue)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private var savedCredentialTokens: [String] {
+        savedCredentialTokens(for: effectiveConfiguration.provider)
+    }
 
     private var savedCredentialToken: String? {
-        environment.providerCredentialStore
-            .credential(for: providerIdentifier)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        savedCredentialTokens.first
+    }
+
+    private func environmentCredentialTokens(for provider: AIProvider) -> [String] {
+        effectiveConfiguration.credentials(for: provider)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private func mergedCredentialTokens(for provider: AIProvider) -> [String] {
+        let merged = savedCredentialTokens(for: provider) + environmentCredentialTokens(for: provider)
+        var seen = Set<String>()
+        var ordered: [String] = []
+        for token in merged where seen.insert(token).inserted {
+            ordered.append(token)
+        }
+        return ordered
     }
 
     private var environmentCredentialToken: String? {
-        environment.configuration.localCredentialToken?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        environmentCredentialTokens(for: effectiveConfiguration.provider).first
     }
 
     private var activeLocalCredential: (token: String, source: LocalCredentialSource)? {
@@ -141,27 +483,57 @@ public final class FloController: ObservableObject {
     }
 
     private var localCredentialToken: String? {
-        activeLocalCredential?.token
+        if let token = activeLocalCredential?.token {
+            return token
+        }
+
+        for provider in effectiveProviderOrder {
+            if let token = mergedCredentialTokens(for: provider).first {
+                return token
+            }
+        }
+        return nil
     }
 
-    private var providerIdentifier: String {
-        environment.configuration.provider.rawValue
+    private var effectiveProviderOrder: [AIProvider] {
+        var order = effectiveConfiguration.providerOrder
+        for provider in AIProvider.allCases where !mergedCredentialTokens(for: provider).isEmpty {
+            if !order.contains(provider) {
+                order.append(provider)
+            }
+        }
+        if order.isEmpty {
+            return [effectiveConfiguration.provider]
+        }
+        return order
+    }
+
+    private var voicePreferenceProvider: AIProvider {
+        if let firstTTSProvider = effectiveProviderOrder.first(
+            where: { effectiveConfiguration.supportsTTS(for: $0) }
+        ) {
+            return firstTTSProvider
+        }
+        return effectiveConfiguration.provider
     }
 
     private var hasLocalCredential: Bool {
-        guard let key = localCredentialToken else {
-            return false
+        localCredentialToken != nil
+    }
+
+    private var hasAnySavedProviderCredential: Bool {
+        for provider in AIProvider.allCases where !savedCredentialTokens(for: provider).isEmpty {
+            return true
         }
-        return !key.isEmpty
+        return false
     }
 
     private var localCredentialEnvVarName: String {
-        switch environment.configuration.provider {
-        case .openai:
+        let names = effectiveProviderOrder.map(\.defaultEnvKeyName)
+        if names.isEmpty {
             return "FLO_OPENAI_API_KEY"
-        case .gemini:
-            return "FLO_GEMINI_API_KEY"
         }
+        return names.joined(separator: " or ")
     }
 
     public init(environment: AppEnvironment) {
@@ -173,6 +545,7 @@ public final class FloController: ObservableObject {
         self.historyEntries = (try? environment.historyStore.load()) ?? []
         self.voicePreferences = environment.voicePreferencesStore.load()
         self.dictationRewritePreferences = environment.dictationRewritePreferencesStore.load()
+        self.providerRoutingOverrides = environment.providerRoutingStore.loadOverrides()
         self.onboardingHotkeyConfirmed = environment.onboardingStateStore.hasCompletedHotkeyConfirmation()
         self.liveDictationEnabled = UserDefaults.standard.object(forKey: Self.liveDictationUserDefaultsKey) as? Bool ?? false
         if self.liveDictationEnabled != self.dictationRewritePreferences.liveTypingEnabled {
@@ -194,10 +567,11 @@ public final class FloController: ObservableObject {
     }
 
     public func bootstrap() async {
+        providerRoutingOverrides = environment.providerRoutingStore.loadOverrides()
         configureFloatingBarActions()
         refreshPermissions()
         configureHotkeysIfAllowed()
-        usesSavedProviderCredential = activeLocalCredential?.source == .keychain
+        usesSavedProviderCredential = hasAnySavedProviderCredential
 
         if hasLocalCredential {
             let keySession = UserSession(
@@ -207,10 +581,10 @@ public final class FloController: ObservableObject {
                 expiresAt: .distantFuture
             )
             authState = .loggedIn(keySession)
-            statusMessage = "Using \(authProviderDisplayName) API key mode."
+            statusMessage = "Using API key mode with provider failover."
             oauthBlockerMessage = nil
             environment.logger.info(
-                "Running in \(authProviderDisplayName) API key mode from \(providerCredentialSourceLabel ?? "local credential")."
+                "Running in API key mode from \(providerCredentialSourceLabel ?? "configured credentials")."
             )
             setRecorderState(.idle)
             voicePreferences = environment.voicePreferencesStore.load()
@@ -220,8 +594,8 @@ public final class FloController: ObservableObject {
             return
         }
 
-        if environment.configuration.provider == .gemini {
-            let blocker = "Gemini API key missing. Add one below or set \(localCredentialEnvVarName) in .env.local."
+        if !activeProviderSupportsOAuth {
+            let blocker = "No API keys found for \(authProviderDisplayName). Set \(localCredentialEnvVarName) in .env.local."
             oauthBlockerMessage = blocker
             authState = .authError(blocker)
             statusMessage = blocker
@@ -231,8 +605,8 @@ public final class FloController: ObservableObject {
             return
         }
 
-        if environment.configuration.oauth == nil {
-            let blocker = "OAuth is blocked: ChatGPT OAuth is disabled for this build."
+        if effectiveConfiguration.oauth == nil {
+            let blocker = "No OAuth provider available and no API keys found. Set \(localCredentialEnvVarName) in .env.local."
             oauthBlockerMessage = blocker
             authState = .authError(blocker)
             statusMessage = blocker
@@ -268,8 +642,10 @@ public final class FloController: ObservableObject {
             return
         }
 
-        if environment.configuration.provider == .gemini {
-            statusMessage = "Add a Gemini API key in-app or set \(localCredentialEnvVarName) in .env.local."
+        guard activeProviderSupportsOAuth else {
+            let message = "OAuth login is unavailable for \(authProviderDisplayName). Add an API key instead."
+            authState = .authError(message)
+            statusMessage = message
             return
         }
 
@@ -297,44 +673,58 @@ public final class FloController: ObservableObject {
     }
 
     public func saveProviderCredential(_ credential: String) {
-        let trimmed = credential.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
+        saveProviderCredential(credential, for: effectiveConfiguration.provider)
+    }
+
+    public func saveProviderCredential(_ credential: String, for provider: AIProvider) {
+        let normalizedCredentials = parseCredentialInput(credential)
+        guard !normalizedCredentials.isEmpty else {
             statusMessage = "API key is empty."
             return
         }
 
         do {
-            try environment.providerCredentialStore.saveCredential(trimmed, for: providerIdentifier)
-            usesSavedProviderCredential = true
+            try environment.providerCredentialStore.saveCredentials(normalizedCredentials, for: provider.rawValue)
+            includeProviderInFailoverRotation(provider)
+            usesSavedProviderCredential = hasAnySavedProviderCredential
+            let sessionToken = localCredentialToken ?? normalizedCredentials[0]
             let session = UserSession(
-                accessToken: trimmed,
+                accessToken: sessionToken,
                 refreshToken: nil,
                 tokenType: "Bearer",
                 expiresAt: .distantFuture
             )
             authState = .loggedIn(session)
             oauthBlockerMessage = nil
-            statusMessage = "\(authProviderDisplayName) API key saved in keychain."
+            if normalizedCredentials.count == 1 {
+                statusMessage = "\(provider.displayName) API key saved in keychain."
+            } else {
+                statusMessage = "\(provider.displayName) API keys saved in keychain (\(normalizedCredentials.count))."
+            }
             setRecorderState(.idle)
             configureHotkeysIfAllowed()
-            environment.logger.info("Saved \(authProviderDisplayName) API key to keychain.")
+            environment.logger.info("Saved \(normalizedCredentials.count) \(provider.displayName) API key(s) to keychain.")
         } catch {
             let message = localizedMessage(for: error)
             statusMessage = message
-            environment.logger.error("Failed to save \(authProviderDisplayName) API key: \(message)")
+            environment.logger.error("Failed to save \(provider.displayName) API key: \(message)")
         }
     }
 
     public func removeSavedProviderCredential() async {
+        await removeSavedProviderCredential(for: effectiveConfiguration.provider)
+    }
+
+    public func removeSavedProviderCredential(for provider: AIProvider) async {
         do {
-            try environment.providerCredentialStore.clearCredential(for: providerIdentifier)
-            usesSavedProviderCredential = false
-            environment.logger.info("Removed saved \(authProviderDisplayName) API key.")
+            try environment.providerCredentialStore.clearCredential(for: provider.rawValue)
+            usesSavedProviderCredential = hasAnySavedProviderCredential
+            environment.logger.info("Removed saved \(provider.displayName) API key.")
             await bootstrap()
         } catch {
             let message = localizedMessage(for: error)
             statusMessage = message
-            environment.logger.error("Failed to remove \(authProviderDisplayName) API key: \(message)")
+            environment.logger.error("Failed to remove \(provider.displayName) API key: \(message)")
         }
     }
 
@@ -1338,6 +1728,20 @@ public final class FloController: ObservableObject {
         if permissionStatus.inputMonitoring != .granted {
             throw FloError.permissionDenied("Input Monitoring")
         }
+    }
+
+    private func parseCredentialInput(_ raw: String) -> [String] {
+        let values = raw
+            .split { $0 == "," || $0 == ";" || $0 == "\n" || $0 == "\t" }
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        var seen = Set<String>()
+        var result: [String] = []
+        for value in values where seen.insert(value).inserted {
+            result.append(value)
+        }
+        return result
     }
 
     private func localizedMessage(for error: Error) -> String {
