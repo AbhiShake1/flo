@@ -176,6 +176,50 @@ struct FloControllerTests {
 
     @Test
     @MainActor
+    func reorderProvidersInFailoverOrderPersistsCustomOrder() {
+        let configuration = FloConfiguration.loadFromEnvironment([
+            "FLO_AI_PROVIDER_ORDER": "openai,gemini,openrouter",
+            "FLO_OPENAI_API_KEY": "openai_key_1",
+            "FLO_GEMINI_API_KEY": "gemini_key_1",
+            "FLO_OPENROUTER_API_KEY": "openrouter_key_1",
+            "FLO_CHATGPT_OAUTH_ENABLED": "false"
+        ])
+        let dependencies = TestDependencies(configuration: configuration)
+        let controller = FloController(environment: dependencies.environment)
+
+        controller.reorderProvidersInFailoverOrder([.openrouter, .openai, .gemini])
+
+        #expect(Array(controller.configuredProviderOrder.prefix(3)) == [.openrouter, .openai, .gemini])
+        #expect(Array(dependencies.providerRoutingStore.overrides.providerOrder.prefix(3)) == [
+            "openrouter",
+            "openai",
+            "gemini"
+        ])
+    }
+
+    @Test
+    @MainActor
+    func addAndRemoveProviderFromFailoverOrderUpdatesMembership() {
+        let configuration = FloConfiguration.loadFromEnvironment([
+            "FLO_AI_PROVIDER_ORDER": "openai,gemini",
+            "FLO_OPENAI_API_KEY": "openai_key_1",
+            "FLO_GEMINI_API_KEY": "gemini_key_1",
+            "FLO_CHATGPT_OAUTH_ENABLED": "false"
+        ])
+        let dependencies = TestDependencies(configuration: configuration)
+        let controller = FloController(environment: dependencies.environment)
+
+        controller.addProviderToFailoverOrder(.openrouter)
+        #expect(controller.providerEnabledForFailover(.openrouter) == true)
+        #expect(dependencies.providerRoutingStore.overrides.providerOrder.contains("openrouter"))
+
+        controller.removeProviderFromFailoverOrder(.gemini)
+        #expect(controller.providerEnabledForFailover(.gemini) == false)
+        #expect(dependencies.providerRoutingStore.overrides.allowedProviders?.contains("gemini") == false)
+    }
+
+    @Test
+    @MainActor
     func routingOverridePrimaryProviderChangesOAuthAvailability() {
         let configuration = makeConfiguration(oauth: sampleOAuthConfiguration(), provider: .openai, geminiApiKey: "gemini_key_1")
         let dependencies = TestDependencies(configuration: configuration)

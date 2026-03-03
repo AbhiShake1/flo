@@ -53,6 +53,14 @@ public final class FloController: ObservableObject {
         effectiveProviderOrder
     }
 
+    public var enabledProvidersInFailoverOrder: [AIProvider] {
+        let order = effectiveProviderOrder
+        guard let allowed = effectiveFailoverPolicy.allowedProviders else {
+            return order
+        }
+        return order.filter { allowed.contains($0) }
+    }
+
     public var activeProviderSupportsOAuth: Bool {
         effectiveConfiguration.provider.supportsOAuth
     }
@@ -203,6 +211,64 @@ public final class FloController: ObservableObject {
 
     public func moveProviderDownInFailoverOrder(_ provider: AIProvider) {
         moveProviderInFailoverOrder(provider, direction: 1)
+    }
+
+    public func reorderProvidersInFailoverOrder(_ providers: [AIProvider]) {
+        var seen = Set<AIProvider>()
+        let normalized = providers.filter { seen.insert($0).inserted }
+        guard !normalized.isEmpty else {
+            return
+        }
+
+        var reordered = normalized
+        for provider in effectiveProviderOrder where !seen.contains(provider) {
+            reordered.append(provider)
+        }
+
+        persistRoutingOverrides(
+            updating: { current in
+                ProviderRoutingOverrides(
+                    providerOrder: reordered.map(\.rawValue),
+                    allowCrossProviderFallback: current.allowCrossProviderFallback,
+                    maxAttempts: current.maxAttempts,
+                    failureThreshold: current.failureThreshold,
+                    cooldownSeconds: current.cooldownSeconds,
+                    allowedProviders: current.allowedProviders
+                )
+            },
+            statusMessage: "Updated provider failover order."
+        )
+    }
+
+    public func addProviderToFailoverOrder(_ provider: AIProvider) {
+        setProviderEnabledInFailover(provider, enabled: true)
+    }
+
+    public func removeProviderFromFailoverOrder(_ provider: AIProvider) {
+        var order = effectiveProviderOrder.filter { $0 != provider }
+        if order.isEmpty {
+            order = [effectiveConfiguration.provider]
+        }
+
+        var allowed = effectiveFailoverPolicy.allowedProviders ?? Set(effectiveProviderOrder)
+        allowed.remove(provider)
+        if allowed.isEmpty, let fallback = order.first {
+            allowed.insert(fallback)
+        }
+
+        persistRoutingOverrides(
+            updating: { current in
+                ProviderRoutingOverrides(
+                    providerOrder: order.map(\.rawValue),
+                    allowCrossProviderFallback: current.allowCrossProviderFallback,
+                    maxAttempts: current.maxAttempts,
+                    failureThreshold: current.failureThreshold,
+                    cooldownSeconds: current.cooldownSeconds,
+                    allowedProviders: Array(allowed).map(\.rawValue).sorted()
+                )
+            },
+            statusMessage: "\(provider.displayName) removed from failover rotation."
+        )
     }
 
     public func setProviderEnabledInFailover(_ provider: AIProvider, enabled: Bool) {

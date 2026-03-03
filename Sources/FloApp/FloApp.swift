@@ -3,6 +3,7 @@ import AppKit
 import Features
 import Infrastructure
 import SwiftUI
+import UniformTypeIdentifiers
 
 @main
 struct FloDesktopApp: App {
@@ -770,16 +771,9 @@ private func recorderStateColor(_ state: RecorderState) -> Color {
 
 private struct LoginStageView: View {
     @ObservedObject var controller: FloController
-    @State private var providerCredentialDraft = ""
-    @State private var selectedProvider: AIProvider = .openai
-    @State private var didInitializeSelectedProvider = false
 
     private var supportsOAuthLogin: Bool {
         controller.activeProviderSupportsOAuth
-    }
-
-    private var selectedProviderDisplayName: String {
-        controller.providerDisplayName(for: selectedProvider)
     }
 
     private var isAuthenticating: Bool {
@@ -792,7 +786,7 @@ private struct LoginStageView: View {
     var body: some View {
         CardContainer {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Provider Authentication")
+                Text("Provider Workspace")
                     .font(.system(size: 24, weight: .semibold))
                     .foregroundStyle(FloTheme.textPrimary)
 
@@ -825,91 +819,11 @@ private struct LoginStageView: View {
                     EmptyView()
                 }
 
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text("Provider")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.white)
-                        Spacer()
-                        Picker("Provider", selection: $selectedProvider) {
-                            ForEach(controller.availableProviders, id: \.self) { provider in
-                                Text(controller.providerDisplayName(for: provider))
-                                    .tag(provider)
-                            }
-                        }
-                        .frame(width: 240)
-                        .labelsHidden()
-                    }
-
-                    SecureField("\(selectedProviderDisplayName) API key(s)", text: $providerCredentialDraft)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel("\(selectedProviderDisplayName) API keys")
-
-                    Text("Enter one key or multiple keys separated by commas or new lines.")
-                        .font(.caption)
-                        .foregroundStyle(FloTheme.textSecondary)
-
-                    HStack(spacing: 8) {
-                        Button("Save API Key") {
-                            controller.saveProviderCredential(providerCredentialDraft, for: selectedProvider)
-                            providerCredentialDraft = ""
-                        }
-                        .buttonStyle(PrimaryActionButtonStyle())
-                        .disabled(providerCredentialDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                        if controller.canRemoveSavedProviderCredential(for: selectedProvider) {
-                            Button("Remove Saved Key") {
-                                Task {
-                                    await controller.removeSavedProviderCredential(for: selectedProvider)
-                                }
-                            }
-                            .buttonStyle(SecondaryActionButtonStyle())
-                        }
-                    }
-
-                    if let sourceLabel = controller.providerCredentialSourceLabel(for: selectedProvider) {
-                        Text(sourceLabel)
-                            .font(.caption)
-                            .foregroundStyle(FloTheme.textSecondary)
-                    }
-
-                    Text("Optional fallback: set \(controller.providerCredentialEnvironmentHint(for: selectedProvider)) in .env.local.")
-                        .font(.caption)
-                        .foregroundStyle(FloTheme.textSecondary)
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Provider overview")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.white.opacity(0.72))
-
-                    ForEach(controller.availableProviders, id: \.self) { provider in
-                        HStack(spacing: 10) {
-                            Text(controller.providerDisplayName(for: provider))
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.white)
-                                .frame(width: 110, alignment: .leading)
-                            if controller.providerSupportsOAuth(provider) {
-                                StatusChip(text: "OAuth", color: FloTheme.success)
-                            } else {
-                                StatusChip(text: "API Key", color: FloTheme.warning)
-                            }
-                            let keyCount = controller.configuredKeyCount(for: provider)
-                            StatusChip(
-                                text: keyCount > 0 ? "\(keyCount) key\(keyCount == 1 ? "" : "s")" : "No keys",
-                                color: keyCount > 0 ? FloTheme.accent : FloTheme.danger
-                            )
-                            Spacer()
-                        }
-                    }
-
-                    if !controller.configuredProviderOrder.isEmpty {
-                        Text("Failover order: \(controller.configuredProviderOrder.map { controller.providerDisplayName(for: $0) }.joined(separator: " -> "))")
-                            .font(.caption2)
-                            .foregroundStyle(Color.white.opacity(0.58))
-                            .lineLimit(2)
-                    }
-                }
+                ProviderConfigurationSection(
+                    controller: controller,
+                    showHeader: false,
+                    includeRoutingPolicyControls: true
+                )
 
                 if supportsOAuthLogin {
                     Divider()
@@ -936,22 +850,10 @@ private struct LoginStageView: View {
                 }
             }
         }
-        .onAppear {
-            guard !didInitializeSelectedProvider else {
-                return
-            }
-            didInitializeSelectedProvider = true
-            if controller.availableProviders.contains(controller.configuredProviderOrder.first ?? .openai),
-               let firstConfigured = controller.configuredProviderOrder.first {
-                selectedProvider = firstConfigured
-            } else {
-                selectedProvider = controller.availableProviders.first ?? .openai
-            }
-        }
     }
 
     private var subtitle: String {
-        "Configure API keys for every provider you want in failover rotation. The primary provider can also use OAuth when available."
+        "Search from all providers, add only the ones you want, drag to reorder failover priority, and manage API keys inline."
     }
 }
 
@@ -2127,181 +2029,297 @@ private struct PermissionControlRow: View {
 
 private struct ProviderConfigurationSection: View {
     @ObservedObject var controller: FloController
-    @State private var selectedProvider: AIProvider = .openai
-    @State private var providerCredentialDraft = ""
-    @State private var initializedSelection = false
+    let showHeader: Bool
+    let includeRoutingPolicyControls: Bool
 
-    private var selectedProviderName: String {
-        controller.providerDisplayName(for: selectedProvider)
-    }
+    @State private var providerSearchQuery = ""
+    @State private var isProviderCommandPresented = false
+    @State private var workingProviderOrder: [AIProvider] = []
+    @State private var expandedProviders = Set<AIProvider>()
+    @State private var credentialDrafts: [AIProvider: String] = [:]
+    @State private var draggedProvider: AIProvider?
+    @State private var pendingRemovalProvider: AIProvider?
 
-    private var routedProviders: [AIProvider] {
-        let providers = controller.configuredProviderOrder
-        if !providers.isEmpty {
-            return providers
-        }
-        return controller.availableProviders
+    init(
+        controller: FloController,
+        showHeader: Bool = true,
+        includeRoutingPolicyControls: Bool = true
+    ) {
+        self.controller = controller
+        self.showHeader = showHeader
+        self.includeRoutingPolicyControls = includeRoutingPolicyControls
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Providers")
+        VStack(alignment: .leading, spacing: 12) {
+            if showHeader { workbenchHeader }
+            providerStackToolbar
+            providerCardsSection
+            if includeRoutingPolicyControls { routingPolicySection }
+        }
+        .onAppear {
+            syncWorkingOrder(with: activeProviders)
+            if expandedProviders.isEmpty, let first = activeProviders.first {
+                expandedProviders.insert(first)
+            }
+        }
+        .onChange(of: activeProviderIDs) { _, _ in
+            syncWorkingOrder(with: activeProviders)
+            if let pendingRemovalProvider, !activeProviders.contains(pendingRemovalProvider) {
+                self.pendingRemovalProvider = nil
+            }
+        }
+    }
+
+    private var workbenchHeader: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Provider Workbench")
                 .font(.headline)
                 .foregroundStyle(.white)
 
-            Text("Manage API key pools for each provider. Failover will rotate across keys and providers.")
+            Text("Search from all providers, add to your stack, drag to reprioritize failover, and manage API keys in one place.")
                 .font(.caption)
                 .foregroundStyle(Color.white.opacity(0.68))
+        }
+    }
 
-            HStack {
-                Text("Provider")
-                    .foregroundStyle(.white)
-                Spacer()
-                Picker("Provider", selection: $selectedProvider) {
-                    ForEach(controller.availableProviders, id: \.self) { provider in
-                        Text(controller.providerDisplayName(for: provider)).tag(provider)
-                    }
-                }
-                .frame(width: 220)
-                .labelsHidden()
-            }
-
-            SecureField("\(selectedProviderName) API key(s)", text: $providerCredentialDraft)
-                .textFieldStyle(.roundedBorder)
-                .accessibilityLabel("\(selectedProviderName) API keys")
-
-            HStack(spacing: 8) {
-                Button("Save API Key") {
-                    controller.saveProviderCredential(providerCredentialDraft, for: selectedProvider)
-                    providerCredentialDraft = ""
-                }
-                .buttonStyle(SecondaryActionButtonStyle())
-                .disabled(providerCredentialDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                if controller.canRemoveSavedProviderCredential(for: selectedProvider) {
-                    Button("Remove Saved Key") {
-                        Task {
-                            await controller.removeSavedProviderCredential(for: selectedProvider)
-                        }
-                    }
-                    .buttonStyle(SecondaryActionButtonStyle())
-                }
-            }
-
-            if let sourceLabel = controller.providerCredentialSourceLabel(for: selectedProvider) {
-                Text(sourceLabel)
-                    .font(.caption)
-                    .foregroundStyle(Color.white.opacity(0.72))
-            }
-
-            Text("Env fallback: \(controller.providerCredentialEnvironmentHint(for: selectedProvider))")
-                .font(.caption2)
-                .foregroundStyle(Color.white.opacity(0.6))
-
-            ForEach(controller.availableProviders, id: \.self) { provider in
-                HStack(spacing: 8) {
-                    Text(controller.providerDisplayName(for: provider))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 95, alignment: .leading)
-                    StatusChip(
-                        text: controller.providerSupportsOAuth(provider) ? "OAuth" : "API Key",
-                        color: controller.providerSupportsOAuth(provider) ? FloTheme.success : FloTheme.warning
-                    )
-                    let keyCount = controller.configuredKeyCount(for: provider)
-                    StatusChip(
-                        text: keyCount > 0 ? "\(keyCount) key\(keyCount == 1 ? "" : "s")" : "No keys",
-                        color: keyCount > 0 ? FloTheme.accent : FloTheme.danger
-                    )
-                    Spacer()
-                }
-            }
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Failover Routing")
+    private var providerStackToolbar: some View {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Provider Stack")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
-
-                Text("Control provider order and retry policy. Flo rotates keys first, then providers.")
+                Text("Drag cards by the grab handle to change the failover order.")
                     .font(.caption)
-                    .foregroundStyle(Color.white.opacity(0.68))
+                    .foregroundStyle(Color.white.opacity(0.62))
+            }
 
-                Toggle(isOn: crossProviderBinding) {
-                    Text("Allow cross-provider fallback")
-                        .foregroundStyle(.white)
+            Spacer()
+
+            StatusChip(
+                text: "\(workingProviderOrder.count) active",
+                color: workingProviderOrder.isEmpty ? FloTheme.warning : FloTheme.success
+            )
+
+            Button("Add Provider") {
+                isProviderCommandPresented = true
+            }
+            .buttonStyle(SecondaryActionButtonStyle())
+            .popover(isPresented: $isProviderCommandPresented, arrowEdge: .top) {
+                providerCommandPalette
+            }
+        }
+    }
+
+    private var providerCommandPalette: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            providerCommandSearchField
+            providerCommandList
+        }
+        .frame(width: 420, height: 400)
+    }
+
+    private var providerCommandSearchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color.secondary)
+
+            TextField("Search providers by name, id, or env key", text: $providerSearchQuery)
+                .textFieldStyle(.plain)
+                .accessibilityLabel("Search providers")
+
+            if !providerSearchQuery.isEmpty {
+                Button {
+                    providerSearchQuery = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.secondary)
                 }
-                .toggleStyle(.switch)
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear provider search")
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .background(
+            Rectangle()
+                .fill(Color.primary.opacity(0.08))
+        )
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.primary.opacity(0.16))
+                .frame(height: 1)
+        }
+    }
 
-                Stepper(value: maxAttemptsBinding, in: 1...20) {
-                    Text("Max attempts: \(controller.failoverMaxAttempts)")
-                        .foregroundStyle(.white)
+    private var providerCommandList: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                if !filteredActiveProviders.isEmpty {
+                    providerCommandGroup(
+                        title: "Added Providers",
+                        providers: filteredActiveProviders,
+                        isAdded: true
+                    )
                 }
 
-                Stepper(value: failureThresholdBinding, in: 1...10) {
-                    Text("Failure threshold before cooldown: \(controller.failoverFailureThreshold)")
-                        .foregroundStyle(.white)
+                if !filteredInactiveProviders.isEmpty {
+                    providerCommandGroup(
+                        title: "All Providers",
+                        providers: Array(filteredInactiveProviders.prefix(maxProviderSuggestions)),
+                        isAdded: false
+                    )
                 }
 
-                Stepper(value: cooldownSecondsBinding, in: 0...900, step: 5) {
-                    Text("Cooldown: \(controller.failoverCooldownSeconds)s")
-                        .foregroundStyle(.white)
+                if filteredActiveProviders.isEmpty && filteredInactiveProviders.isEmpty {
+                    Text("No provider found.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 24)
                 }
+            }
+            .padding(8)
+        }
+    }
 
-                ForEach(routedProviders, id: \.self) { provider in
-                    HStack(spacing: 8) {
-                        Toggle("", isOn: providerEnabledBinding(for: provider))
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .disabled(!controller.providerSupportsFailoverOperation(provider))
+    private func providerCommandGroup(
+        title: String,
+        providers: [AIProvider],
+        isAdded: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color.secondary)
+                .padding(.horizontal, 6)
+                .padding(.top, 2)
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(controller.providerDisplayName(for: provider))
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.white)
-                            let keyCount = controller.configuredKeyCount(for: provider)
-                            Text(
-                                keyCount > 0
-                                    ? "\(keyCount) key\(keyCount == 1 ? "" : "s") configured"
-                                    : "No configured keys yet"
+            ForEach(providers, id: \.self) { provider in
+                providerCommandItem(provider, isAdded: isAdded)
+            }
+        }
+    }
+
+    private func providerCommandItem(_ provider: AIProvider, isAdded: Bool) -> some View {
+        Button {
+            if isAdded {
+                expandedProviders.insert(provider)
+            } else {
+                addProvider(provider)
+            }
+            isProviderCommandPresented = false
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: isAdded ? "check" : "plus")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 14)
+                    .foregroundStyle(isAdded ? FloTheme.success : FloTheme.accent)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(controller.providerDisplayName(for: provider))
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+                    Text(provider.rawValue)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                if isAdded {
+                    Text("Added")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Color.secondary)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 7)
+            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.primary.opacity(0.06))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+        .accessibilityLabel(
+            isAdded
+                ? "Open \(controller.providerDisplayName(for: provider)) in provider stack"
+                : "Add \(controller.providerDisplayName(for: provider)) provider"
+        )
+    }
+
+    private var providerCardsSection: some View {
+        Group {
+            if workingProviderOrder.isEmpty {
+                Text("No providers are active yet. Use Add Provider to insert one.")
+                    .font(.caption)
+                    .foregroundStyle(Color.white.opacity(0.62))
+                    .padding(.vertical, 8)
+            } else {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 300), spacing: 10, alignment: .top)],
+                    alignment: .leading,
+                    spacing: 10
+                ) {
+                    ForEach(workingProviderOrder, id: \.self) { provider in
+                        providerCard(provider)
+                            .onDrag {
+                                draggedProvider = provider
+                                return NSItemProvider(object: provider.rawValue as NSString)
+                            }
+                            .onDrop(
+                                of: [UTType.text],
+                                delegate: ProviderReorderDropDelegate(
+                                    target: provider,
+                                    orderedProviders: $workingProviderOrder,
+                                    draggedProvider: $draggedProvider,
+                                    onCommit: { order in
+                                        controller.reorderProvidersInFailoverOrder(order)
+                                    }
+                                )
                             )
-                            .font(.caption2)
-                            .foregroundStyle(Color.white.opacity(0.6))
-                        }
-
-                        Spacer()
-
-                        Button {
-                            controller.moveProviderUpInFailoverOrder(provider)
-                        } label: {
-                            Image(systemName: "arrow.up")
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(!controller.canMoveProviderUpInFailoverOrder(provider))
-                        .accessibilityLabel("Move \(controller.providerDisplayName(for: provider)) up")
-
-                        Button {
-                            controller.moveProviderDownInFailoverOrder(provider)
-                        } label: {
-                            Image(systemName: "arrow.down")
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(!controller.canMoveProviderDownInFailoverOrder(provider))
-                        .accessibilityLabel("Move \(controller.providerDisplayName(for: provider)) down")
                     }
                 }
             }
         }
-        .onAppear {
-            guard !initializedSelection else {
-                return
+    }
+
+    private var routingPolicySection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+
+            Text("Failover Policy")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+
+            Text("Flo rotates keys first, then providers in your stack order.")
+                .font(.caption)
+                .foregroundStyle(Color.white.opacity(0.68))
+
+            Toggle(isOn: crossProviderBinding) {
+                Text("Allow cross-provider fallback")
+                    .foregroundStyle(.white)
             }
-            initializedSelection = true
-            if let firstConfigured = controller.configuredProviderOrder.first {
-                selectedProvider = firstConfigured
-            } else {
-                selectedProvider = controller.availableProviders.first ?? .openai
+            .toggleStyle(.switch)
+
+            Stepper(value: maxAttemptsBinding, in: 1...20) {
+                Text("Max attempts: \(controller.failoverMaxAttempts)")
+                    .foregroundStyle(.white)
+            }
+
+            Stepper(value: failureThresholdBinding, in: 1...10) {
+                Text("Failure threshold before cooldown: \(controller.failoverFailureThreshold)")
+                    .foregroundStyle(.white)
+            }
+
+            Stepper(value: cooldownSecondsBinding, in: 0...900, step: 5) {
+                Text("Cooldown: \(controller.failoverCooldownSeconds)s")
+                    .foregroundStyle(.white)
             }
         }
     }
@@ -2334,11 +2352,306 @@ private struct ProviderConfigurationSection: View {
         )
     }
 
-    private func providerEnabledBinding(for provider: AIProvider) -> Binding<Bool> {
-        Binding(
-            get: { controller.providerEnabledForFailover(provider) },
-            set: { controller.setProviderEnabledInFailover(provider, enabled: $0) }
+    private var activeProviders: [AIProvider] {
+        controller.enabledProvidersInFailoverOrder
+    }
+
+    private var activeProviderIDs: [String] {
+        activeProviders.map(\.rawValue)
+    }
+
+    private var inactiveProviders: [AIProvider] {
+        let activeSet = Set(activeProviders)
+        return controller.availableProviders.filter { !activeSet.contains($0) }
+    }
+
+    private var filteredActiveProviders: [AIProvider] {
+        let trimmed = providerSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return activeProviders
+        }
+        return activeProviders.filter { matchesProviderSearch($0, query: trimmed) }
+    }
+
+    private var filteredInactiveProviders: [AIProvider] {
+        let trimmed = providerSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return inactiveProviders
+        }
+        return inactiveProviders.filter { matchesProviderSearch($0, query: trimmed) }
+    }
+
+    private var maxProviderSuggestions: Int {
+        24
+    }
+
+    private func matchesProviderSearch(_ provider: AIProvider, query: String) -> Bool {
+        let normalizedQuery = query.lowercased()
+        let terms = normalizedQuery.split(separator: " ").map(String.init)
+        guard !terms.isEmpty else {
+            return true
+        }
+
+        let searchable = providerSearchableText(provider)
+        return terms.allSatisfy { term in
+            searchable.contains(term) || fuzzySubsequenceMatch(term, within: searchable)
+        }
+    }
+
+    private func providerSearchableText(_ provider: AIProvider) -> String {
+        let legacyKeys = ProviderCatalog.entry(for: provider)?.legacyEnvKeys.joined(separator: " ") ?? ""
+        return [
+            controller.providerDisplayName(for: provider),
+            provider.rawValue,
+            provider.defaultEnvKeyName,
+            provider.defaultEnvKeysName,
+            legacyKeys
+        ]
+        .joined(separator: " ")
+        .lowercased()
+    }
+
+    private func fuzzySubsequenceMatch(_ pattern: String, within text: String) -> Bool {
+        guard !pattern.isEmpty else {
+            return true
+        }
+
+        var index = text.startIndex
+        for char in pattern {
+            guard index < text.endIndex else {
+                return false
+            }
+            if let found = text[index...].firstIndex(of: char) {
+                index = text.index(after: found)
+            } else {
+                return false
+            }
+        }
+        return true
+    }
+
+    private func syncWorkingOrder(with providers: [AIProvider]) {
+        if workingProviderOrder.map(\.rawValue) != providers.map(\.rawValue) {
+            workingProviderOrder = providers
+        }
+    }
+
+    private func addProvider(_ provider: AIProvider) {
+        controller.addProviderToFailoverOrder(provider)
+        if !workingProviderOrder.contains(provider) {
+            workingProviderOrder.append(provider)
+        }
+        expandedProviders.insert(provider)
+        pendingRemovalProvider = nil
+    }
+
+    private func removeProvider(_ provider: AIProvider) {
+        guard workingProviderOrder.count > 1 else {
+            return
+        }
+        controller.removeProviderFromFailoverOrder(provider)
+        workingProviderOrder.removeAll { $0 == provider }
+        expandedProviders.remove(provider)
+        credentialDrafts.removeValue(forKey: provider)
+        pendingRemovalProvider = nil
+    }
+
+    private func handleRemoveTap(_ provider: AIProvider) {
+        guard workingProviderOrder.count > 1 else {
+            return
+        }
+        if pendingRemovalProvider == provider {
+            removeProvider(provider)
+            return
+        }
+        pendingRemovalProvider = provider
+    }
+
+    private func toggleExpanded(_ provider: AIProvider) {
+        if expandedProviders.contains(provider) {
+            expandedProviders.remove(provider)
+        } else {
+            expandedProviders.insert(provider)
+        }
+    }
+
+    private func providerCard(_ provider: AIProvider) -> some View {
+        let displayName = controller.providerDisplayName(for: provider)
+        let keyCount = controller.configuredKeyCount(for: provider)
+        let isExpanded = expandedProviders.contains(provider)
+        let isPendingRemoval = pendingRemovalProvider == provider
+
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.72))
+                    .frame(width: 24, height: 24)
+                    .background(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(Color.white.opacity(0.10))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+                    )
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(displayName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        StatusChip(
+                            text: controller.providerSupportsOAuth(provider) ? "OAuth" : "API Key",
+                            color: controller.providerSupportsOAuth(provider) ? FloTheme.success : FloTheme.warning
+                        )
+                        StatusChip(
+                            text: keyCount > 0 ? "\(keyCount) key\(keyCount == 1 ? "" : "s")" : "No keys",
+                            color: keyCount > 0 ? FloTheme.accent : FloTheme.danger
+                        )
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                Button {
+                    toggleExpanded(provider)
+                } label: {
+                    Image(systemName: isExpanded ? "chevron.up.circle.fill" : "chevron.down.circle")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.72))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isExpanded ? "Collapse \(displayName)" : "Expand \(displayName)")
+
+                Button {
+                    handleRemoveTap(provider)
+                } label: {
+                    Image(systemName: isPendingRemoval ? "checkmark.circle.fill" : "minus.circle.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(
+                            workingProviderOrder.count > 1
+                                ? (isPendingRemoval ? FloTheme.warning : FloTheme.danger)
+                                : Color.white.opacity(0.35)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(workingProviderOrder.count <= 1)
+                .accessibilityLabel(
+                    isPendingRemoval
+                        ? "Confirm removal of \(displayName) from failover rotation"
+                        : "Mark \(displayName) for removal from failover rotation"
+                )
+            }
+
+            if isPendingRemoval && workingProviderOrder.count > 1 {
+                Text("Press the checkmark again to remove this provider from your stack.")
+                    .font(.caption2)
+                    .foregroundStyle(FloTheme.warning)
+                    .transition(.opacity)
+            }
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 8) {
+                    SecureField("Paste \(displayName) API key(s)", text: credentialDraftBinding(for: provider))
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("\(displayName) API keys")
+
+                    Text("Save one key or comma-separated key list. New save replaces this provider's saved pool.")
+                        .font(.caption2)
+                        .foregroundStyle(Color.white.opacity(0.58))
+
+                    HStack(spacing: 8) {
+                        Button("Save Keys") {
+                            let draft = credentialDrafts[provider] ?? ""
+                            controller.saveProviderCredential(draft, for: provider)
+                            credentialDrafts[provider] = ""
+                        }
+                        .buttonStyle(SecondaryActionButtonStyle())
+                        .disabled((credentialDrafts[provider] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                        if controller.canRemoveSavedProviderCredential(for: provider) {
+                            Button("Remove Saved Key") {
+                                Task {
+                                    await controller.removeSavedProviderCredential(for: provider)
+                                }
+                            }
+                            .buttonStyle(SecondaryActionButtonStyle())
+                        }
+                    }
+
+                    if let sourceLabel = controller.providerCredentialSourceLabel(for: provider) {
+                        Text(sourceLabel)
+                            .font(.caption2)
+                            .foregroundStyle(Color.white.opacity(0.66))
+                    }
+
+                    Text("Env fallback: \(controller.providerCredentialEnvironmentHint(for: provider))")
+                        .font(.caption2)
+                        .foregroundStyle(Color.white.opacity(0.58))
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.06))
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func credentialDraftBinding(for provider: AIProvider) -> Binding<String> {
+        Binding(
+            get: { credentialDrafts[provider] ?? "" },
+            set: { credentialDrafts[provider] = $0 }
+        )
+    }
+}
+
+private struct ProviderReorderDropDelegate: DropDelegate {
+    let target: AIProvider
+    @Binding var orderedProviders: [AIProvider]
+    @Binding var draggedProvider: AIProvider?
+    let onCommit: ([AIProvider]) -> Void
+
+    func dropEntered(info: DropInfo) {
+        guard
+            let draggedProvider,
+            draggedProvider != target,
+            let fromIndex = orderedProviders.firstIndex(of: draggedProvider),
+            let toIndex = orderedProviders.firstIndex(of: target)
+        else {
+            return
+        }
+
+        if orderedProviders[toIndex] != draggedProvider {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                orderedProviders.move(
+                    fromOffsets: IndexSet(integer: fromIndex),
+                    toOffset: toIndex > fromIndex ? toIndex + 1 : toIndex
+                )
+            }
+        }
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard draggedProvider != nil else {
+            return false
+        }
+        onCommit(orderedProviders)
+        draggedProvider = nil
+        return true
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
     }
 }
 
