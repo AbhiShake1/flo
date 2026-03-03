@@ -96,7 +96,7 @@ private struct StatusBarMenuContent: View {
         }
 
         Menu("Languages") {
-            Button("Open Voice settings") {
+            Button("Open Speech settings") {
                 openApp(.voice)
             }
 
@@ -171,7 +171,7 @@ private enum AppFlowStage: Int, CaseIterable {
         case .history:
             return "History"
         case .voice:
-            return "Voice"
+            return "Speech"
         }
     }
 
@@ -188,7 +188,7 @@ private enum AppFlowStage: Int, CaseIterable {
         case .history:
             return "Session events and recent activity"
         case .voice:
-            return "Immersive voice interaction"
+            return "Speech playback and dictation rewrite"
         }
     }
 
@@ -451,7 +451,7 @@ private struct SidebarSurface: View {
                         Text("flo")
                             .font(.system(size: 21, weight: .semibold))
                             .foregroundStyle(FloTheme.textPrimary)
-                        Text("Voice workspace")
+                        Text("Speech workspace")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(FloTheme.textSecondary)
                     }
@@ -937,11 +937,6 @@ private struct SettingsStageView: View {
                 alignment: .leading,
                 spacing: 16
             ) {
-                if showDictationSection {
-                    CardContainer {
-                        DictationStyleConfigurationSection(controller: controller)
-                    }
-                }
                 if showSystemSection {
                     CardContainer {
                         UtilityActionsSection(controller: controller)
@@ -985,22 +980,12 @@ private struct SettingsStageView: View {
         return searchTerms.allSatisfy { haystack.contains($0) }
     }
 
-    private var showHotkeysSection: Bool {
-        matches(["shortcut", "hotkey", "dictation hold", "read selected", "custom key", "keyboard"])
-    }
-
-    private var showDictationSection: Bool {
-        matches(["dictation", "rewrite", "tone", "warmth", "enthusiasm", "emoji", "instructions"])
-    }
-
     private var showSystemSection: Bool {
         matches(["system", "live typing", "updates", "dictation"])
     }
 
     private var showEmptyState: Bool {
         !searchTerms.isEmpty &&
-            !showHotkeysSection &&
-            !showDictationSection &&
             !showSystemSection
     }
 }
@@ -1225,6 +1210,12 @@ private struct VoiceStudioStageView: View {
                 Text("Use left and right arrows to cycle voices. Each switch triggers spoken preview for immediate feedback.")
                     .font(.caption)
                     .foregroundStyle(FloTheme.textSecondary)
+            }
+
+            SectionDivider()
+
+            CardContainer {
+                DictationStyleConfigurationSection(controller: controller)
             }
 
             if let statusMessage = controller.statusMessage, !statusMessage.isEmpty {
@@ -1975,6 +1966,7 @@ private struct ProviderConfigurationSection: View {
     @State private var workingProviderOrder: [AIProvider] = []
     @State private var expandedProviders = Set<AIProvider>()
     @State private var credentialDrafts: [AIProvider: String] = [:]
+    @State private var modelSearchQueries: [AIProvider: String] = [:]
     @State private var draggedProvider: AIProvider?
     @State private var pendingRemovalProvider: AIProvider?
 
@@ -2026,7 +2018,7 @@ private struct ProviderConfigurationSection: View {
                 Text("Provider Stack")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
-                Text("Drag cards by the grab handle to change the failover order.")
+                Text("Drag any provider card to change the failover order.")
                     .font(.caption)
                     .foregroundStyle(Color.white.opacity(0.62))
             }
@@ -2084,7 +2076,7 @@ private struct ProviderConfigurationSection: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Color.secondary)
 
-            TextField("Search providers by name, id, or env key", text: $providerSearchQuery)
+            TextField("Search providers by name or id", text: $providerSearchQuery)
                 .textFieldStyle(.plain)
                 .accessibilityLabel("Search providers")
 
@@ -2127,7 +2119,7 @@ private struct ProviderConfigurationSection: View {
                 if !filteredInactiveProviders.isEmpty {
                     providerCommandGroup(
                         title: "All Providers",
-                        providers: Array(filteredInactiveProviders.prefix(maxProviderSuggestions)),
+                        providers: inactiveProviderSuggestions,
                         isAdded: false
                     )
                 }
@@ -2176,6 +2168,13 @@ private struct ProviderConfigurationSection: View {
                     .font(.system(size: 12, weight: .semibold))
                     .frame(width: 14)
                     .foregroundStyle(isAdded ? FloTheme.success : FloTheme.accent)
+
+                providerLogoBadge(
+                    for: provider,
+                    size: 18,
+                    fallbackSystemImage: "circle.grid.2x2.fill"
+                )
+
                 VStack(alignment: .leading, spacing: 1) {
                     Text(controller.providerDisplayName(for: provider))
                         .font(.system(size: 13, weight: .medium))
@@ -2347,6 +2346,21 @@ private struct ProviderConfigurationSection: View {
         return inactiveProviders.filter { matchesProviderSearch($0, query: trimmed) }
     }
 
+    private var inactiveProviderSuggestions: [AIProvider] {
+        let suggested = Array(filteredInactiveProviders.prefix(maxProviderSuggestions))
+        guard
+            !suggested.contains(.openai),
+            filteredInactiveProviders.contains(.openai),
+            maxProviderSuggestions > 0
+        else {
+            return suggested
+        }
+
+        var updated = Array(suggested.prefix(maxProviderSuggestions - 1))
+        updated.append(.openai)
+        return updated
+    }
+
     private var maxProviderSuggestions: Int {
         24
     }
@@ -2365,13 +2379,9 @@ private struct ProviderConfigurationSection: View {
     }
 
     private func providerSearchableText(_ provider: AIProvider) -> String {
-        let legacyKeys = ProviderCatalog.entry(for: provider)?.legacyEnvKeys.joined(separator: " ") ?? ""
         return [
             controller.providerDisplayName(for: provider),
-            provider.rawValue,
-            provider.defaultEnvKeyName,
-            provider.defaultEnvKeysName,
-            legacyKeys
+            provider.rawValue
         ]
         .joined(separator: " ")
         .lowercased()
@@ -2449,18 +2459,11 @@ private struct ProviderConfigurationSection: View {
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Color.white.opacity(0.72))
-                    .frame(width: 24, height: 24)
-                    .background(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(Color.white.opacity(0.10))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
-                    )
+                providerLogoBadge(
+                    for: provider,
+                    size: 24,
+                    fallbackSystemImage: "line.3.horizontal"
+                )
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 6) {
@@ -2554,9 +2557,7 @@ private struct ProviderConfigurationSection: View {
                             .foregroundStyle(Color.white.opacity(0.66))
                     }
 
-                    Text("Env fallback: \(controller.providerCredentialEnvironmentHint(for: provider))")
-                        .font(.caption2)
-                        .foregroundStyle(Color.white.opacity(0.58))
+                    providerModelSection(for: provider)
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
@@ -2571,6 +2572,167 @@ private struct ProviderConfigurationSection: View {
                 .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
         )
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func providerModelSection(for provider: AIProvider) -> some View {
+        let searchText = modelSearchQueries[provider] ?? ""
+        let models = controller.providerModels(for: provider, matching: searchText)
+        let maxVisibleModels = 120
+        let visibleModels = Array(models.prefix(maxVisibleModels))
+        let activeRewriteModel = controller.activeRewriteModel(for: provider)
+        let overrideModel = controller.rewriteModelOverride(for: provider)
+
+        return VStack(alignment: .leading, spacing: 8) {
+            Divider()
+
+            HStack(alignment: .center) {
+                Text("Models (models.dev)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                Spacer(minLength: 8)
+                if overrideModel != nil {
+                    Button("Reset Model") {
+                        controller.clearRewriteModelOverride(for: provider)
+                    }
+                    .buttonStyle(SecondaryActionButtonStyle())
+                }
+            }
+
+            Text("Current rewrite model: \(activeRewriteModel)")
+                .font(.caption2)
+                .foregroundStyle(Color.white.opacity(0.64))
+
+            TextField("Search provider models", text: modelSearchBinding(for: provider))
+                .textFieldStyle(.roundedBorder)
+                .font(.caption)
+
+            if visibleModels.isEmpty {
+                let emptyStateText = controller.hasModelsDevCatalog
+                    ? "No models listed for this provider on models.dev."
+                    : "Loading models from models.dev..."
+                Text(emptyStateText)
+                    .font(.caption2)
+                    .foregroundStyle(Color.white.opacity(0.60))
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 4) {
+                        ForEach(visibleModels, id: \.id) { model in
+                            let isActive = model.id == activeRewriteModel
+                            let activeLabel = (overrideModel != nil) ? "Selected" : "Active"
+
+                            Button {
+                                controller.setRewriteModel(model.id, for: provider)
+                            } label: {
+                                HStack(spacing: 8) {
+                                    providerLogoBadge(
+                                        for: provider,
+                                        size: 16,
+                                        fallbackSystemImage: "square.stack.3d.up.fill"
+                                    )
+
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(model.name)
+                                            .font(.caption.weight(.medium))
+                                            .foregroundStyle(Color.white.opacity(0.90))
+                                            .lineLimit(1)
+                                        Text(model.id)
+                                            .font(.caption2)
+                                            .foregroundStyle(Color.white.opacity(0.58))
+                                            .lineLimit(1)
+                                    }
+
+                                    Spacer(minLength: 0)
+
+                                    if isActive {
+                                        StatusChip(
+                                            text: activeLabel,
+                                            color: FloTheme.success
+                                        )
+                                    }
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(Color.white.opacity(isActive ? 0.10 : 0.04))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(isActive ? 0.22 : 0.10), lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Use \(model.name) for \(controller.providerDisplayName(for: provider)) rewrite")
+                        }
+                    }
+                }
+                .frame(maxHeight: 210)
+
+                if models.count > visibleModels.count {
+                    Text("Showing \(visibleModels.count) of \(models.count) models. Refine your search to narrow this list.")
+                        .font(.caption2)
+                        .foregroundStyle(Color.white.opacity(0.58))
+                }
+            }
+        }
+    }
+
+    private func modelSearchBinding(for provider: AIProvider) -> Binding<String> {
+        Binding(
+            get: { modelSearchQueries[provider] ?? "" },
+            set: { modelSearchQueries[provider] = $0 }
+        )
+    }
+
+    @ViewBuilder
+    private func providerLogoContent(
+        for provider: AIProvider,
+        iconSize: CGFloat,
+        fallbackSystemImage: String
+    ) -> some View {
+        if let logoURL = controller.providerLogoURL(for: provider) {
+            AsyncImage(url: logoURL, transaction: Transaction(animation: .easeInOut(duration: 0.16))) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: iconSize, height: iconSize)
+                default:
+                    Image(systemName: fallbackSystemImage)
+                        .font(.system(size: max(10, iconSize * 0.72), weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.76))
+                }
+            }
+        } else {
+            Image(systemName: fallbackSystemImage)
+                .font(.system(size: max(10, iconSize * 0.72), weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.76))
+        }
+    }
+
+    private func providerLogoBadge(
+        for provider: AIProvider,
+        size: CGFloat,
+        fallbackSystemImage: String
+    ) -> some View {
+        let cornerRadius = size * 0.28
+
+        return ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(Color.white.opacity(0.10))
+
+            providerLogoContent(
+                for: provider,
+                iconSize: size * 0.68,
+                fallbackSystemImage: fallbackSystemImage
+            )
+        }
+        .frame(width: size, height: size)
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+        )
     }
 
     private func credentialDraftBinding(for provider: AIProvider) -> Binding<String> {

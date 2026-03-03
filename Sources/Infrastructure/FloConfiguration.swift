@@ -468,13 +468,44 @@ public struct FloConfiguration: Sendable {
         )
     }
 
+    public func withProviderConfigurations(_ providerConfigurations: [AIProvider: ProviderRuntimeConfiguration]) -> FloConfiguration {
+        FloConfiguration(
+            provider: self.provider,
+            transcriptionURL: self.transcriptionURL,
+            ttsURL: self.ttsURL,
+            rewriteURL: self.rewriteURL,
+            openAIApiKey: self.providerCredentialPool[.openai]?.first,
+            geminiApiKey: self.providerCredentialPool[.gemini]?.first,
+            transcriptionModel: self.transcriptionModel,
+            ttsModel: self.ttsModel,
+            rewriteModel: self.rewriteModel,
+            ttsVoice: self.ttsVoice,
+            ttsSpeed: self.ttsSpeed,
+            maxTTSCharactersPerChunk: self.maxTTSCharactersPerChunk,
+            retainAudioDebugArtifacts: self.retainAudioDebugArtifacts,
+            hostAllowlist: self.hostAllowlist,
+            featureFlags: self.featureFlags,
+            manualUpdateURL: self.manualUpdateURL,
+            oauth: self.oauth,
+            failoverPolicy: self.failoverPolicy,
+            providerOrder: self.providerOrder,
+            providerConfigurations: providerConfigurations,
+            providerCredentialPool: self.providerCredentialPool
+        )
+    }
+
     public func applyingRoutingOverrides(_ overrides: ProviderRoutingOverrides) -> FloConfiguration {
+        let normalizedModelOverrides = Self.normalizedRewriteModelOverrides(overrides.rewriteModelsByProvider)
+        let configurationWithModelOverrides = self.withProviderConfigurations(
+            Self.applyingRewriteModelOverrides(normalizedModelOverrides, to: self.providerConfigurations)
+        )
+
         let overrideOrder = Self.normalizedProviders(
             overrides.providerOrder.compactMap(AIProvider.init(rawValue:))
         )
-        var resolvedOrder = overrideOrder.isEmpty ? self.providerOrder : overrideOrder
+        var resolvedOrder = overrideOrder.isEmpty ? configurationWithModelOverrides.providerOrder : overrideOrder
         if resolvedOrder.isEmpty {
-            resolvedOrder = [self.provider]
+            resolvedOrder = [configurationWithModelOverrides.provider]
         }
 
         let overrideAllowedProviders = overrides.allowedProviders.map {
@@ -484,28 +515,28 @@ public struct FloConfiguration: Sendable {
             if let overrideAllowedProviders {
                 return overrideAllowedProviders.isEmpty ? nil : overrideAllowedProviders
             }
-            return self.failoverPolicy.allowedProviders
+            return configurationWithModelOverrides.failoverPolicy.allowedProviders
         }()
 
         if let resolvedAllowedProviders {
             resolvedOrder = resolvedOrder.filter { resolvedAllowedProviders.contains($0) }
         }
         if resolvedOrder.isEmpty, let resolvedAllowedProviders {
-            resolvedOrder = self.providerOrder.filter { resolvedAllowedProviders.contains($0) }
+            resolvedOrder = configurationWithModelOverrides.providerOrder.filter { resolvedAllowedProviders.contains($0) }
         }
         if resolvedOrder.isEmpty {
-            resolvedOrder = [self.provider]
+            resolvedOrder = [configurationWithModelOverrides.provider]
         }
 
         let mergedPolicy = ProviderFailoverPolicy(
-            allowCrossProviderFallback: overrides.allowCrossProviderFallback ?? self.failoverPolicy.allowCrossProviderFallback,
-            maxAttempts: overrides.maxAttempts ?? self.failoverPolicy.maxAttempts,
-            failureThreshold: overrides.failureThreshold ?? self.failoverPolicy.failureThreshold,
-            cooldownSeconds: overrides.cooldownSeconds ?? self.failoverPolicy.cooldownSeconds,
+            allowCrossProviderFallback: overrides.allowCrossProviderFallback ?? configurationWithModelOverrides.failoverPolicy.allowCrossProviderFallback,
+            maxAttempts: overrides.maxAttempts ?? configurationWithModelOverrides.failoverPolicy.maxAttempts,
+            failureThreshold: overrides.failureThreshold ?? configurationWithModelOverrides.failoverPolicy.failureThreshold,
+            cooldownSeconds: overrides.cooldownSeconds ?? configurationWithModelOverrides.failoverPolicy.cooldownSeconds,
             allowedProviders: resolvedAllowedProviders
         )
 
-        return self.withFailoverPolicy(mergedPolicy)
+        return configurationWithModelOverrides.withFailoverPolicy(mergedPolicy)
             .withProviderOrder(resolvedOrder)
     }
 
@@ -516,18 +547,7 @@ public struct FloConfiguration: Sendable {
                 .lowercased()
         ) ?? .openai
 
-        var credentialPool: [AIProvider: [String]] = [:]
-        for provider in AIProvider.allCases {
-            let primaryValue = env[primaryCredentialEnvKey(for: provider)]
-            let legacyValues = legacyCredentialEnvKeys(for: provider).map { env[$0] }
-            let pool = parseCredentialPool(
-                csvValue: env[csvCredentialEnvKey(for: provider)],
-                fallbackValues: [primaryValue] + legacyValues
-            )
-            if !pool.isEmpty {
-                credentialPool[provider] = pool
-            }
-        }
+        let credentialPool: [AIProvider: [String]] = [:]
 
         let providerConfigurations = Dictionary(
             uniqueKeysWithValues: AIProvider.allCases.map { provider in
@@ -540,12 +560,6 @@ public struct FloConfiguration: Sendable {
         )
         if providerOrder.isEmpty {
             providerOrder = [selectedProvider]
-        }
-
-        for candidate in AIProvider.allCases {
-            if credentialPool[candidate]?.isEmpty == false, !providerOrder.contains(candidate) {
-                providerOrder.append(candidate)
-            }
         }
 
         let maxTTSCharactersPerChunk = Int(env["FLO_TTS_CHUNK_SIZE"] ?? "1500") ?? 1500
@@ -834,6 +848,85 @@ public struct FloConfiguration: Sendable {
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
 
         return parts.compactMap(AIProvider.init(rawValue:))
+    }
+
+    private static func normalizedRewriteModelOverrides(_ raw: [String: String]?) -> [AIProvider: String] {
+        guard let raw else {
+            return [:]
+        }
+
+        var normalized: [AIProvider: String] = [:]
+        for (providerID, modelID) in raw {
+            guard
+                let provider = AIProvider(rawValue: providerID),
+                let trimmedModelID = nonEmpty(modelID)
+            else {
+                continue
+            }
+            normalized[provider] = trimmedModelID
+        }
+
+        return normalized
+    }
+
+    private static func applyingRewriteModelOverrides(
+        _ overrides: [AIProvider: String],
+        to configurations: [AIProvider: ProviderRuntimeConfiguration]
+    ) -> [AIProvider: ProviderRuntimeConfiguration] {
+        guard !overrides.isEmpty else {
+            return configurations
+        }
+
+        var updated = configurations
+        for (provider, rewriteModel) in overrides {
+            guard let runtime = updated[provider] else {
+                continue
+            }
+
+            let rewriteURL = rewriteURLByApplyingModelOverride(
+                for: provider,
+                currentURL: runtime.rewriteURL,
+                rewriteModel: rewriteModel
+            )
+
+            updated[provider] = ProviderRuntimeConfiguration(
+                provider: runtime.provider,
+                transcriptionURL: runtime.transcriptionURL,
+                ttsURL: runtime.ttsURL,
+                rewriteURL: rewriteURL,
+                transcriptionModel: runtime.transcriptionModel,
+                ttsModel: runtime.ttsModel,
+                rewriteModel: rewriteModel,
+                ttsVoice: runtime.ttsVoice,
+                ttsSpeed: runtime.ttsSpeed,
+                capabilities: runtime.capabilities
+            )
+        }
+
+        return updated
+    }
+
+    private static func rewriteURLByApplyingModelOverride(
+        for provider: AIProvider,
+        currentURL: URL,
+        rewriteModel: String
+    ) -> URL {
+        guard (provider == .gemini || provider == .google) else {
+            return currentURL
+        }
+
+        guard currentURL.host?.lowercased().contains("generativelanguage.googleapis.com") == true else {
+            return currentURL
+        }
+
+        let modelPath: String
+        if rewriteModel.hasPrefix("models/") {
+            modelPath = rewriteModel
+        } else {
+            modelPath = "models/\(rewriteModel)"
+        }
+
+        return URL(string: "https://generativelanguage.googleapis.com/v1beta/\(modelPath):generateContent") ?? currentURL
     }
 
     private static func parseCredentialPool(csvValue: String?, fallbackValues: [String?]) -> [String] {

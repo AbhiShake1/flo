@@ -386,8 +386,8 @@ struct InfrastructureServiceTests {
 
         let configuration = FloConfiguration.loadFromEnvironment(env)
         #expect(configuration.provider == .gemini)
-        #expect(configuration.geminiApiKey == "gemini_key_123")
-        #expect(configuration.localCredentialToken == "gemini_key_123")
+        #expect(configuration.geminiApiKey == nil)
+        #expect(configuration.localCredentialToken == nil)
         #expect(configuration.oauth == nil)
         #expect(configuration.transcriptionURL.host == "generativelanguage.googleapis.com")
         #expect(configuration.ttsURL.host == "generativelanguage.googleapis.com")
@@ -404,8 +404,8 @@ struct InfrastructureServiceTests {
 
         let configuration = FloConfiguration.loadFromEnvironment(env)
         #expect(configuration.providerOrder == [.openai, .gemini])
-        #expect(configuration.credentials(for: .openai) == ["openai_key_1", "openai_key_2"])
-        #expect(configuration.credentials(for: .gemini) == ["gemini_key_1", "gemini_key_2"])
+        #expect(configuration.credentials(for: .openai).isEmpty)
+        #expect(configuration.credentials(for: .gemini).isEmpty)
     }
 
     @Test
@@ -424,8 +424,8 @@ struct InfrastructureServiceTests {
         let configuration = FloConfiguration.loadFromEnvironment(env)
 
         #expect(configuration.providerOrder.prefix(3) == [.openrouter, .groq, .openai])
-        #expect(configuration.credentials(for: .openrouter) == ["openrouter_key_1"])
-        #expect(configuration.credentials(for: .groq) == ["groq_key_1"])
+        #expect(configuration.credentials(for: .openrouter).isEmpty)
+        #expect(configuration.credentials(for: .groq).isEmpty)
         #expect(configuration.failoverPolicy.maxAttempts == 5)
         #expect(configuration.failoverPolicy.failureThreshold == 3)
         #expect(configuration.failoverPolicy.cooldownSeconds == 45)
@@ -443,6 +443,10 @@ struct InfrastructureServiceTests {
             "FLO_CHATGPT_OAUTH_ENABLED": "false"
         ]
         let configuration = FloConfiguration.loadFromEnvironment(env)
+        let credentialStore = InMemoryProviderCredentialStore(credentialsByProvider: [
+            "openai": ["openai_env_key"],
+            "gemini": ["gemini_env_key"]
+        ])
 
         let openAICalls = LockedStringArray()
         let geminiCalls = LockedStringArray()
@@ -467,7 +471,8 @@ struct InfrastructureServiceTests {
             services: [
                 .openai: openAIService,
                 .gemini: geminiService
-            ]
+            ],
+            credentialStore: credentialStore
         )
 
         let fileURL = try temporaryAudioFile()
@@ -488,6 +493,9 @@ struct InfrastructureServiceTests {
             "FLO_CHATGPT_OAUTH_ENABLED": "false"
         ]
         let configuration = FloConfiguration.loadFromEnvironment(env)
+        let credentialStore = InMemoryProviderCredentialStore(credentialsByProvider: [
+            "openai": ["openai_key_1", "openai_key_2"]
+        ])
 
         let attemptedTokens = LockedStringArray()
         let service = FailoverTranscriptionService(
@@ -505,7 +513,8 @@ struct InfrastructureServiceTests {
                     }
                     return TranscriptResult(text: "rotated success", requestID: "req_rotated", latencyMs: 12, confidence: 0.9)
                 }
-            ]
+            ],
+            credentialStore: credentialStore
         )
 
         let fileURL = try temporaryAudioFile()
@@ -526,6 +535,10 @@ struct InfrastructureServiceTests {
             "FLO_CHATGPT_OAUTH_ENABLED": "false"
         ]
         let configuration = FloConfiguration.loadFromEnvironment(env)
+        let credentialStore = InMemoryProviderCredentialStore(credentialsByProvider: [
+            "openai": ["openai_env_key"],
+            "gemini": ["gemini_env_key"]
+        ])
 
         let openAICalls = LockedStringArray()
         let geminiCalls = LockedStringArray()
@@ -546,7 +559,8 @@ struct InfrastructureServiceTests {
                     geminiCalls.append(token)
                     return TranscriptResult(text: "should-not-run", requestID: nil, latencyMs: 0, confidence: nil)
                 }
-            ]
+            ],
+            credentialStore: credentialStore
         )
 
         let fileURL = try temporaryAudioFile()
@@ -653,6 +667,10 @@ struct InfrastructureServiceTests {
             "FLO_CHATGPT_OAUTH_ENABLED": "false"
         ]
         let configuration = FloConfiguration.loadFromEnvironment(env)
+        let credentialStore = InMemoryProviderCredentialStore(credentialsByProvider: [
+            "openrouter": ["openrouter_key_1"],
+            "groq": ["groq_key_1"]
+        ])
 
         let openRouterCalls = LockedStringArray()
         let groqCalls = LockedStringArray()
@@ -674,7 +692,8 @@ struct InfrastructureServiceTests {
                     groqCalls.append(token)
                     return "rewritten via groq: \(transcript)"
                 }
-            ]
+            ],
+            credentialStore: credentialStore
         )
 
         let rewritten = try await service.rewrite(
@@ -697,6 +716,10 @@ struct InfrastructureServiceTests {
             "FLO_CHATGPT_OAUTH_ENABLED": "false"
         ]
         let configuration = FloConfiguration.loadFromEnvironment(env)
+        let credentialStore = InMemoryProviderCredentialStore(credentialsByProvider: [
+            "openai": ["openai_env_key"],
+            "gemini": ["gemini_env_key"]
+        ])
         let routingStore = InMemoryProviderRoutingStore(
             overrides: ProviderRoutingOverrides(allowCrossProviderFallback: false)
         )
@@ -720,6 +743,7 @@ struct InfrastructureServiceTests {
                     return TranscriptResult(text: "gemini succeeded", requestID: "req_g", latencyMs: 11, confidence: nil)
                 }
             ],
+            credentialStore: credentialStore,
             routingStore: routingStore
         )
 

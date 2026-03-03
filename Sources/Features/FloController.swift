@@ -22,6 +22,7 @@ public final class FloController: ObservableObject {
     @Published public private(set) var liveDictationEnabled: Bool
     @Published public private(set) var liveTranscriptPreview: String = ""
     @Published public private(set) var providerRoutingOverrides: ProviderRoutingOverrides
+    @Published public private(set) var modelsDevCatalogSnapshot: ModelsDevCatalogSnapshot
     @Published public var statusMessage: String?
 
     public var isAuthenticated: Bool {
@@ -42,11 +43,29 @@ public final class FloController: ObservableObject {
     }
 
     public var authProviderDisplayName: String {
-        effectiveConfiguration.providerDisplayName
+        providerDisplayName(for: effectiveConfiguration.provider)
     }
 
     public var availableProviders: [AIProvider] {
-        AIProvider.allCases
+        var seen = Set<AIProvider>()
+        var providers: [AIProvider] = []
+
+        for remoteProvider in modelsDevCatalogSnapshot.providers {
+            guard let provider = AIProvider(rawValue: remoteProvider.id), seen.insert(provider).inserted else {
+                continue
+            }
+            providers.append(provider)
+        }
+
+        for provider in AIProvider.allCases where seen.insert(provider).inserted {
+            providers.append(provider)
+        }
+
+        return providers
+    }
+
+    public var hasModelsDevCatalog: Bool {
+        modelsDevCatalogSnapshot.fetchedAt != .distantPast
     }
 
     public var configuredProviderOrder: [AIProvider] {
@@ -63,10 +82,6 @@ public final class FloController: ObservableObject {
 
     public var activeProviderSupportsOAuth: Bool {
         effectiveConfiguration.provider.supportsOAuth
-    }
-
-    public var providerCredentialEnvironmentHint: String {
-        localCredentialEnvVarName
     }
 
     public var supportedVoices: [String] {
@@ -140,15 +155,107 @@ public final class FloController: ObservableObject {
     }
 
     public func providerDisplayName(for provider: AIProvider) -> String {
-        provider.displayName
+        modelsDevProviderEntry(for: provider)?.name ?? provider.displayName
+    }
+
+    public func providerLogoURL(for provider: AIProvider) -> URL? {
+        if let logoURL = modelsDevProviderEntry(for: provider)?.logoURL {
+            return logoURL
+        }
+
+        guard let encodedProviderID = provider.rawValue.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+            return nil
+        }
+        return URL(string: "https://models.dev/logos/\(encodedProviderID).png")
+    }
+
+    public func providerModels(for provider: AIProvider, matching query: String = "") -> [ModelsDevModelEntry] {
+        var models = modelsDevProviderEntry(for: provider)?.models ?? []
+        let activeModel = activeRewriteModel(for: provider)
+        if !activeModel.isEmpty, !models.contains(where: { $0.id == activeModel }) {
+            models.insert(
+                ModelsDevModelEntry(id: activeModel, name: activeModel),
+                at: 0
+            )
+        }
+
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !trimmedQuery.isEmpty else {
+            return models
+        }
+
+        let terms = trimmedQuery.split(separator: " ").map(String.init)
+        guard !terms.isEmpty else {
+            return models
+        }
+
+        return models.filter { model in
+            let searchable = "\(model.name) \(model.id)".lowercased()
+            return terms.allSatisfy { searchable.contains($0) }
+        }
+    }
+
+    public func activeRewriteModel(for provider: AIProvider) -> String {
+        effectiveConfiguration.runtimeConfiguration(for: provider)?.rewriteModel ?? ""
+    }
+
+    public func rewriteModelOverride(for provider: AIProvider) -> String? {
+        providerRoutingOverrides.rewriteModelsByProvider?[provider.rawValue]
+    }
+
+    public func setRewriteModel(_ modelID: String, for provider: AIProvider) {
+        let trimmedModelID = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedModelID.isEmpty else {
+            return
+        }
+
+        persistRoutingOverrides(
+            updating: { current in
+                var overrides = current.rewriteModelsByProvider ?? [:]
+                overrides[provider.rawValue] = trimmedModelID
+
+                return ProviderRoutingOverrides(
+                    providerOrder: current.providerOrder,
+                    allowCrossProviderFallback: current.allowCrossProviderFallback,
+                    maxAttempts: current.maxAttempts,
+                    failureThreshold: current.failureThreshold,
+                    cooldownSeconds: current.cooldownSeconds,
+                    allowedProviders: current.allowedProviders,
+                    rewriteModelsByProvider: overrides
+                )
+            },
+            statusMessage: "\(providerDisplayName(for: provider)) rewrite model set to \(trimmedModelID)."
+        )
+    }
+
+    public func clearRewriteModelOverride(for provider: AIProvider) {
+        persistRoutingOverrides(
+            updating: { current in
+                var overrides = current.rewriteModelsByProvider ?? [:]
+                overrides.removeValue(forKey: provider.rawValue)
+                let normalized = overrides.isEmpty ? nil : overrides
+
+                return ProviderRoutingOverrides(
+                    providerOrder: current.providerOrder,
+                    allowCrossProviderFallback: current.allowCrossProviderFallback,
+                    maxAttempts: current.maxAttempts,
+                    failureThreshold: current.failureThreshold,
+                    cooldownSeconds: current.cooldownSeconds,
+                    allowedProviders: current.allowedProviders,
+                    rewriteModelsByProvider: normalized
+                )
+            },
+            statusMessage: "\(providerDisplayName(for: provider)) rewrite model override cleared."
+        )
+    }
+
+    public func refreshModelsDevCatalog(forceRefresh: Bool = false) async {
+        let snapshot = await modelsDevCatalogService.loadCatalog(forceRefresh: forceRefresh)
+        modelsDevCatalogSnapshot = snapshot
     }
 
     public func providerSupportsOAuth(_ provider: AIProvider) -> Bool {
         provider.supportsOAuth
-    }
-
-    public func providerCredentialEnvironmentHint(for provider: AIProvider) -> String {
-        provider.defaultEnvKeyName
     }
 
     public func providerCredentialSourceLabel(for provider: AIProvider) -> String? {
@@ -158,10 +265,6 @@ public final class FloController: ObservableObject {
                 return "Saved in app keychain"
             }
             return "Saved in app keychain (\(savedCount) keys)"
-        }
-
-        if !environmentCredentialTokens(for: provider).isEmpty {
-            return "Loaded from \(provider.defaultEnvKeyName)"
         }
 
         return nil
@@ -233,7 +336,8 @@ public final class FloController: ObservableObject {
                     maxAttempts: current.maxAttempts,
                     failureThreshold: current.failureThreshold,
                     cooldownSeconds: current.cooldownSeconds,
-                    allowedProviders: current.allowedProviders
+                    allowedProviders: current.allowedProviders,
+                    rewriteModelsByProvider: current.rewriteModelsByProvider
                 )
             },
             statusMessage: "Updated provider failover order."
@@ -264,7 +368,8 @@ public final class FloController: ObservableObject {
                     maxAttempts: current.maxAttempts,
                     failureThreshold: current.failureThreshold,
                     cooldownSeconds: current.cooldownSeconds,
-                    allowedProviders: Array(allowed).map(\.rawValue).sorted()
+                    allowedProviders: Array(allowed).map(\.rawValue).sorted(),
+                    rewriteModelsByProvider: current.rewriteModelsByProvider
                 )
             },
             statusMessage: "\(provider.displayName) removed from failover rotation."
@@ -295,7 +400,8 @@ public final class FloController: ObservableObject {
                     maxAttempts: current.maxAttempts,
                     failureThreshold: current.failureThreshold,
                     cooldownSeconds: current.cooldownSeconds,
-                    allowedProviders: Array(allowed).map(\.rawValue).sorted()
+                    allowedProviders: Array(allowed).map(\.rawValue).sorted(),
+                    rewriteModelsByProvider: current.rewriteModelsByProvider
                 )
             },
             statusMessage: enabled
@@ -313,7 +419,8 @@ public final class FloController: ObservableObject {
                     maxAttempts: current.maxAttempts,
                     failureThreshold: current.failureThreshold,
                     cooldownSeconds: current.cooldownSeconds,
-                    allowedProviders: current.allowedProviders
+                    allowedProviders: current.allowedProviders,
+                    rewriteModelsByProvider: current.rewriteModelsByProvider
                 )
             },
             statusMessage: enabled
@@ -332,7 +439,8 @@ public final class FloController: ObservableObject {
                     maxAttempts: clamped,
                     failureThreshold: current.failureThreshold,
                     cooldownSeconds: current.cooldownSeconds,
-                    allowedProviders: current.allowedProviders
+                    allowedProviders: current.allowedProviders,
+                    rewriteModelsByProvider: current.rewriteModelsByProvider
                 )
             },
             statusMessage: "Failover max attempts set to \(clamped)."
@@ -349,7 +457,8 @@ public final class FloController: ObservableObject {
                     maxAttempts: current.maxAttempts,
                     failureThreshold: clamped,
                     cooldownSeconds: current.cooldownSeconds,
-                    allowedProviders: current.allowedProviders
+                    allowedProviders: current.allowedProviders,
+                    rewriteModelsByProvider: current.rewriteModelsByProvider
                 )
             },
             statusMessage: "Provider failure threshold set to \(clamped)."
@@ -366,7 +475,8 @@ public final class FloController: ObservableObject {
                     maxAttempts: current.maxAttempts,
                     failureThreshold: current.failureThreshold,
                     cooldownSeconds: clamped,
-                    allowedProviders: current.allowedProviders
+                    allowedProviders: current.allowedProviders,
+                    rewriteModelsByProvider: current.rewriteModelsByProvider
                 )
             },
             statusMessage: "Provider cooldown set to \(clamped)s."
@@ -397,7 +507,8 @@ public final class FloController: ObservableObject {
                     maxAttempts: current.maxAttempts,
                     failureThreshold: current.failureThreshold,
                     cooldownSeconds: current.cooldownSeconds,
-                    allowedProviders: current.allowedProviders
+                    allowedProviders: current.allowedProviders,
+                    rewriteModelsByProvider: current.rewriteModelsByProvider
                 )
             },
             statusMessage: "Moved \(provider.displayName) in failover order."
@@ -421,7 +532,8 @@ public final class FloController: ObservableObject {
                     maxAttempts: current.maxAttempts,
                     failureThreshold: current.failureThreshold,
                     cooldownSeconds: current.cooldownSeconds,
-                    allowedProviders: Array(allowed).map(\.rawValue).sorted()
+                    allowedProviders: Array(allowed).map(\.rawValue).sorted(),
+                    rewriteModelsByProvider: current.rewriteModelsByProvider
                 )
             },
             statusMessage: nil
@@ -429,15 +541,12 @@ public final class FloController: ObservableObject {
     }
 
     private let environment: AppEnvironment
+    private let modelsDevCatalogService: ModelsDevCatalogService
     private var isDictationListening = false
     private var stateResetTask: Task<Void, Never>?
     private var liveInjectedTranscript = ""
     private var didPauseLiveTypingAfterError = false
     private var lastLiveInjectionAt = Date.distantPast
-    private enum LocalCredentialSource {
-        case keychain
-        case environment
-    }
     private static let liveDictationUserDefaultsKey = "flo.live_dictation_enabled"
     private static let maxFailoverAttempts = 20
     private static let maxFailoverFailureThreshold = 10
@@ -475,6 +584,22 @@ public final class FloController: ObservableObject {
             }
             return parsed.map(\.rawValue).sorted()
         }()
+        let normalizedRewriteModelsByProvider: [String: String]? = {
+            guard let raw = overrides.rewriteModelsByProvider else {
+                return nil
+            }
+            var normalized: [String: String] = [:]
+            for (providerID, modelID) in raw {
+                guard
+                    let provider = AIProvider(rawValue: providerID),
+                    !modelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                else {
+                    continue
+                }
+                normalized[provider.rawValue] = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            return normalized.isEmpty ? nil : normalized
+        }()
 
         let maxAttempts = overrides.maxAttempts.map { max(1, min(Self.maxFailoverAttempts, $0)) }
         let failureThreshold = overrides.failureThreshold.map { max(1, min(Self.maxFailoverFailureThreshold, $0)) }
@@ -486,7 +611,8 @@ public final class FloController: ObservableObject {
             maxAttempts: maxAttempts,
             failureThreshold: failureThreshold,
             cooldownSeconds: cooldownSeconds,
-            allowedProviders: normalizedAllowedProviders
+            allowedProviders: normalizedAllowedProviders,
+            rewriteModelsByProvider: normalizedRewriteModelsByProvider
         )
     }
 
@@ -518,14 +644,8 @@ public final class FloController: ObservableObject {
         savedCredentialTokens.first
     }
 
-    private func environmentCredentialTokens(for provider: AIProvider) -> [String] {
-        effectiveConfiguration.credentials(for: provider)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-    }
-
     private func mergedCredentialTokens(for provider: AIProvider) -> [String] {
-        let merged = savedCredentialTokens(for: provider) + environmentCredentialTokens(for: provider)
+        let merged = savedCredentialTokens(for: provider)
         var seen = Set<String>()
         var ordered: [String] = []
         for token in merged where seen.insert(token).inserted {
@@ -534,22 +654,8 @@ public final class FloController: ObservableObject {
         return ordered
     }
 
-    private var environmentCredentialToken: String? {
-        environmentCredentialTokens(for: effectiveConfiguration.provider).first
-    }
-
-    private var activeLocalCredential: (token: String, source: LocalCredentialSource)? {
-        if let saved = savedCredentialToken, !saved.isEmpty {
-            return (saved, .keychain)
-        }
-        if let environmentCredentialToken, !environmentCredentialToken.isEmpty {
-            return (environmentCredentialToken, .environment)
-        }
-        return nil
-    }
-
     private var localCredentialToken: String? {
-        if let token = activeLocalCredential?.token {
+        if let token = savedCredentialToken {
             return token
         }
 
@@ -594,16 +700,16 @@ public final class FloController: ObservableObject {
         return false
     }
 
-    private var localCredentialEnvVarName: String {
-        let names = effectiveProviderOrder.map(\.defaultEnvKeyName)
-        if names.isEmpty {
-            return "FLO_OPENAI_API_KEY"
-        }
-        return names.joined(separator: " or ")
+    private func modelsDevProviderEntry(for provider: AIProvider) -> ModelsDevProviderEntry? {
+        modelsDevCatalogSnapshot.providerByID[provider.rawValue]
     }
 
-    public init(environment: AppEnvironment) {
+    public init(
+        environment: AppEnvironment,
+        modelsDevCatalogService: ModelsDevCatalogService = .shared
+    ) {
         self.environment = environment
+        self.modelsDevCatalogService = modelsDevCatalogService
 
         let loadedBindings = environment.shortcutStore.loadBindings()
         self.shortcutBindings = Self.normalizedBindings(loadedBindings)
@@ -612,6 +718,7 @@ public final class FloController: ObservableObject {
         self.voicePreferences = environment.voicePreferencesStore.load()
         self.dictationRewritePreferences = environment.dictationRewritePreferencesStore.load()
         self.providerRoutingOverrides = environment.providerRoutingStore.loadOverrides()
+        self.modelsDevCatalogSnapshot = .empty
         self.onboardingHotkeyConfirmed = environment.onboardingStateStore.hasCompletedHotkeyConfirmation()
         self.liveDictationEnabled = UserDefaults.standard.object(forKey: Self.liveDictationUserDefaultsKey) as? Bool ?? false
         if self.liveDictationEnabled != self.dictationRewritePreferences.liveTypingEnabled {
@@ -633,6 +740,10 @@ public final class FloController: ObservableObject {
     }
 
     public func bootstrap() async {
+        Task {
+            await self.refreshModelsDevCatalog()
+        }
+
         providerRoutingOverrides = environment.providerRoutingStore.loadOverrides()
         configureFloatingBarActions()
         refreshPermissions()
@@ -661,7 +772,7 @@ public final class FloController: ObservableObject {
         }
 
         if !activeProviderSupportsOAuth {
-            let blocker = "No API keys found for \(authProviderDisplayName). Set \(localCredentialEnvVarName) in .env.local."
+            let blocker = "No API keys found for \(authProviderDisplayName). Add a key in Provider Workbench."
             oauthBlockerMessage = blocker
             authState = .authError(blocker)
             statusMessage = blocker
@@ -672,7 +783,7 @@ public final class FloController: ObservableObject {
         }
 
         if effectiveConfiguration.oauth == nil {
-            let blocker = "No OAuth provider available and no API keys found. Set \(localCredentialEnvVarName) in .env.local."
+            let blocker = "No OAuth provider available and no API keys found. Add a key in Provider Workbench."
             oauthBlockerMessage = blocker
             authState = .authError(blocker)
             statusMessage = blocker
@@ -808,7 +919,7 @@ public final class FloController: ObservableObject {
                     expiresAt: .distantFuture
                 )
             )
-            statusMessage = "Unset \(localCredentialEnvVarName) in .env.local to fully log out."
+            statusMessage = "Remove the saved API key from Provider Workbench to fully log out."
             return
         }
 

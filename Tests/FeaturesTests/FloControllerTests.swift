@@ -32,9 +32,10 @@ struct FloControllerTests {
         let configuration = makeConfiguration(
             oauth: nil,
             provider: .gemini,
-            geminiApiKey: "gemini_key_123"
+            geminiApiKey: nil
         )
         let dependencies = TestDependencies(configuration: configuration)
+        dependencies.providerCredentialStore.credentials["gemini"] = "gemini_key_123"
         let controller = FloController(environment: dependencies.environment)
 
         await controller.bootstrap()

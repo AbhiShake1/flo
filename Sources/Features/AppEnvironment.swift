@@ -79,7 +79,7 @@ public extension AppEnvironment {
             let savedPool = providerCredentialStore.credentials(for: provider.rawValue)
             if !savedPool.isEmpty {
                 resolvedConfiguration = resolvedConfiguration.withCredentialPool(
-                    savedPool + resolvedConfiguration.credentials(for: provider),
+                    savedPool,
                     for: provider
                 )
             }
