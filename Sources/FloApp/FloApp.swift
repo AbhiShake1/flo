@@ -16,6 +16,7 @@ struct FloDesktopApp: App {
     var body: some Scene {
         WindowGroup("flo") {
             RootView(controller: controller)
+                .containerBackground(.clear, for: .window)
                 .task {
                     await controller.bootstrap()
                 }
@@ -108,8 +109,7 @@ private enum FloTheme {
     static let success = Color(red: 0.18, green: 0.74, blue: 0.48)
     static let warning = Color(red: 0.95, green: 0.67, blue: 0.25)
     static let danger = Color(red: 0.91, green: 0.35, blue: 0.35)
-    static let backgroundTop = Color(red: 0.04, green: 0.07, blue: 0.12)
-    static let backgroundBottom = Color(red: 0.02, green: 0.03, blue: 0.06)
+    static let backdropTint = Color.black.opacity(0.24)
 }
 
 private struct RootView: View {
@@ -161,23 +161,11 @@ private struct RootView: View {
 private struct AppBackdrop: View {
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [FloTheme.backgroundTop, FloTheme.backgroundBottom],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            Rectangle()
+                .fill(.ultraThinMaterial)
 
-            Circle()
-                .fill(FloTheme.accent.opacity(0.22))
-                .frame(width: 420, height: 420)
-                .blur(radius: 130)
-                .offset(x: -330, y: -220)
-
-            Circle()
-                .fill(FloTheme.accentSoft.opacity(0.2))
-                .frame(width: 360, height: 360)
-                .blur(radius: 120)
-                .offset(x: 340, y: -180)
+            Rectangle()
+                .fill(FloTheme.backdropTint)
         }
         .ignoresSafeArea()
     }
