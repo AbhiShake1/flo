@@ -79,6 +79,7 @@ private enum AppFlowStage: Int, CaseIterable {
     case login
     case permissions
     case settings
+    case voice
 
     var title: String {
         switch self {
@@ -88,32 +89,55 @@ private enum AppFlowStage: Int, CaseIterable {
             return "Permissions"
         case .settings:
             return "Settings"
+        case .voice:
+            return "Voice"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .login:
+            return "Account and API access"
+        case .permissions:
+            return "System permission management"
+        case .settings:
+            return "Shortcuts, dictation, and history"
+        case .voice:
+            return "Immersive voice interaction"
         }
     }
 
     var icon: String {
         switch self {
         case .login:
-            return "person.crop.circle.badge.checkmark"
+            return "person.badge.key"
         case .permissions:
-            return "lock.shield"
+            return "checkmark.shield"
         case .settings:
-            return "slider.horizontal.3"
+            return "switch.2"
+        case .voice:
+            return "sparkles"
         }
     }
 }
 
 private enum FloTheme {
-    static let accent = Color(red: 0.20, green: 0.64, blue: 0.92)
-    static let accentSoft = Color(red: 0.31, green: 0.85, blue: 0.78)
+    static let accent = Color(red: 0.31, green: 0.56, blue: 0.94)
+    static let accentSoft = Color(red: 0.43, green: 0.68, blue: 0.99)
     static let success = Color(red: 0.18, green: 0.74, blue: 0.48)
-    static let warning = Color(red: 0.95, green: 0.67, blue: 0.25)
-    static let danger = Color(red: 0.91, green: 0.35, blue: 0.35)
-    static let backdropTint = Color.black.opacity(0.24)
+    static let warning = Color(red: 0.93, green: 0.70, blue: 0.30)
+    static let danger = Color(red: 0.90, green: 0.37, blue: 0.38)
+    static let backdropTint = Color.black.opacity(0.34)
+    static let textPrimary = Color.white.opacity(0.92)
+    static let textSecondary = Color.white.opacity(0.66)
+    static let sidebarFill = Color.black.opacity(0.24)
+    static let workspaceFill = Color.black.opacity(0.16)
 }
 
 private struct RootView: View {
     @ObservedObject var controller: FloController
+    @State private var selectedStage: AppFlowStage = .login
+    @State private var settingsSearchQuery = ""
 
     private var currentStage: AppFlowStage {
         if !controller.isAuthenticated {
@@ -125,36 +149,66 @@ private struct RootView: View {
         return .settings
     }
 
+    private var availableStages: Set<AppFlowStage> {
+        switch currentStage {
+        case .login:
+            return [.login]
+        case .permissions:
+            return [.login, .permissions]
+        case .settings, .voice:
+            return Set(AppFlowStage.allCases)
+        }
+    }
+
+    private var activeStage: AppFlowStage {
+        availableStages.contains(selectedStage) ? selectedStage : currentStage
+    }
+
     var body: some View {
         ZStack {
             AppBackdrop()
 
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 22) {
-                    HeroPanel(controller: controller)
-                    FlowProgress(currentStage: currentStage)
-
-                    Group {
-                        switch currentStage {
-                        case .login:
-                            LoginStageView(controller: controller)
-                        case .permissions:
-                            PermissionStageView(controller: controller)
-                        case .settings:
-                            SettingsStageView(controller: controller)
-                        }
-                    }
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-                    .animation(.easeInOut(duration: 0.25), value: currentStage)
+            HStack(spacing: 0) {
+                SidebarSurface(
+                    controller: controller,
+                    currentStage: currentStage,
+                    activeStage: activeStage,
+                    availableStages: availableStages
+                ) { stage in
+                    selectedStage = stage
                 }
-                .padding(.horizontal, 34)
-                .padding(.vertical, 28)
-                .frame(maxWidth: 1_050)
+                .frame(width: 248)
+                .padding(.leading, 18)
+                .padding(.trailing, 14)
+                .padding(.vertical, 20)
+
+                Rectangle()
+                    .fill(Color.white.opacity(0.14))
+                    .frame(width: 1)
+                    .padding(.vertical, 16)
+
+                WorkspaceSurface(
+                    controller: controller,
+                    activeStage: activeStage,
+                    settingsSearchQuery: $settingsSearchQuery
+                )
+                .padding(.horizontal, 22)
+                .padding(.vertical, 20)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .tint(FloTheme.accent)
-        .frame(minWidth: 940, minHeight: 720)
+        .frame(minWidth: 1_120, minHeight: 760)
+        .onAppear {
+            selectedStage = currentStage
+        }
+        .onChange(of: currentStage) { _, newStage in
+            if !availableStages.contains(selectedStage) {
+                selectedStage = newStage
+            }
+            if newStage != .settings {
+                settingsSearchQuery = ""
+            }
+        }
     }
 }
 
@@ -164,93 +218,290 @@ private struct AppBackdrop: View {
             Rectangle()
                 .fill(.ultraThinMaterial)
 
-            Rectangle()
-                .fill(FloTheme.backdropTint)
+            LinearGradient(
+                colors: [
+                    Color(red: 0.05, green: 0.07, blue: 0.11),
+                    Color(red: 0.07, green: 0.08, blue: 0.12),
+                    Color(red: 0.03, green: 0.04, blue: 0.07)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .blur(radius: 24)
+
+            RadialGradient(
+                colors: [
+                    Color(red: 0.17, green: 0.24, blue: 0.37).opacity(0.36),
+                    .clear
+                ],
+                center: .center,
+                startRadius: 20,
+                endRadius: 620
+            )
+            .blendMode(.screen)
+            .blur(radius: 48)
+
+            RadialGradient(
+                colors: [
+                    Color(red: 0.15, green: 0.29, blue: 0.74).opacity(0.25),
+                    .clear
+                ],
+                center: .bottomLeading,
+                startRadius: 30,
+                endRadius: 520
+            )
+            .blendMode(.screen)
+            .blur(radius: 70)
+
+            RadialGradient(
+                colors: [
+                    .clear,
+                    Color.black.opacity(0.42)
+                ],
+                center: .center,
+                startRadius: 180,
+                endRadius: 820
+            )
+
+            BackdropGrain()
+                .opacity(0.15)
         }
         .ignoresSafeArea()
     }
 }
 
-private struct HeroPanel: View {
-    @ObservedObject var controller: FloController
-
+private struct BackdropGrain: View {
     var body: some View {
-        CardContainer {
-            HStack(alignment: .center, spacing: 18) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("flo")
-                        .font(.system(size: 42, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-
-                    Text("Voice control for dictation and read-aloud, powered by \(controller.authProviderDisplayName).")
-                        .foregroundStyle(Color.white.opacity(0.78))
-                        .font(.system(size: 15, weight: .medium))
-                }
-
-                Spacer()
-
-                VStack(alignment: .trailing, spacing: 8) {
-                    StatusChip(
-                        text: controller.recorderState.label,
-                        color: recorderStateColor
-                    )
-
-                    if controller.isAuthenticated {
-                        StatusChip(text: "Connected", color: FloTheme.success)
-                    } else {
-                        StatusChip(text: "Sign in required", color: FloTheme.warning)
-                    }
-                }
+        Canvas { context, size in
+            for index in 0..<1200 {
+                let seed = Double(index) * 0.731
+                let x = CGFloat(pseudoRandom(seed * 19.31)) * size.width
+                let y = CGFloat(pseudoRandom(seed * 71.73)) * size.height
+                let alpha = 0.018 + (pseudoRandom(seed * 2.9) * 0.04)
+                let dotSize = CGFloat(0.5 + (pseudoRandom(seed * 11.6) * 0.9))
+                let rect = CGRect(x: x, y: y, width: dotSize, height: dotSize)
+                context.fill(Path(ellipseIn: rect), with: .color(Color.white.opacity(alpha)))
             }
-        }
-    }
-
-    private var recorderStateColor: Color {
-        switch controller.recorderState {
-        case .error:
-            return FloTheme.danger
-        case .listening, .transcribing, .injecting, .speaking:
-            return FloTheme.accentSoft
-        case .idle:
-            return FloTheme.accent
         }
     }
 }
 
-private struct FlowProgress: View {
+private struct SidebarSurface: View {
+    @ObservedObject var controller: FloController
     let currentStage: AppFlowStage
+    let activeStage: AppFlowStage
+    let availableStages: Set<AppFlowStage>
+    let onSelectStage: (AppFlowStage) -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            ForEach(AppFlowStage.allCases, id: \.self) { stage in
-                let isCurrent = stage == currentStage
-                let isCompleted = stage.rawValue < currentStage.rawValue
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [FloTheme.accent, FloTheme.accentSoft],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 28, height: 28)
+                        Image(systemName: "waveform.and.mic")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
 
-                HStack(spacing: 8) {
-                    Image(systemName: isCompleted ? "checkmark.circle.fill" : stage.icon)
-                        .font(.system(size: 13, weight: .semibold))
-                    Text(stage.title)
-                        .font(.system(size: 13, weight: .semibold))
+                    Text("flo")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(FloTheme.textPrimary)
                 }
-                .foregroundStyle(isCurrent || isCompleted ? .white : Color.white.opacity(0.65))
-                .padding(.vertical, 8)
-                .padding(.horizontal, 12)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(
-                            isCurrent
-                                ? FloTheme.accent.opacity(0.38)
-                                : isCompleted
-                                    ? FloTheme.success.opacity(0.28)
-                                    : Color.white.opacity(0.08)
-                        )
+
+                Text("Voice workspace")
+                    .font(.caption)
+                    .foregroundStyle(FloTheme.textSecondary)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(AppFlowStage.allCases, id: \.self) { stage in
+                    let enabled = availableStages.contains(stage)
+                    Button {
+                        onSelectStage(stage)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: stage.icon)
+                                .font(.system(size: 13, weight: .semibold))
+                                .frame(width: 16)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(stage.title)
+                                    .font(.system(size: 13, weight: .semibold))
+                                Text(stage.subtitle)
+                                    .font(.system(size: 11, weight: .medium))
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                    }
+                    .buttonStyle(SidebarStageButtonStyle(isActive: stage == activeStage, isEnabled: enabled))
+                    .disabled(!enabled)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Status")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(FloTheme.textSecondary)
+
+                StatusChip(text: controller.recorderState.label, color: recorderStateColor(controller.recorderState))
+                StatusChip(
+                    text: controller.isAuthenticated ? "Connected" : "Sign in required",
+                    color: controller.isAuthenticated ? FloTheme.success : FloTheme.warning
                 )
-                .overlay(
-                    Capsule(style: .continuous)
-                        .strokeBorder(Color.white.opacity(isCurrent ? 0.25 : 0.12), lineWidth: 1)
-                )
+
+                Text("Required next: \(currentStage.title)")
+                    .font(.caption2)
+                    .foregroundStyle(FloTheme.textSecondary)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.clear)
+
+            Spacer(minLength: 0)
+
+            if controller.isAuthenticated {
+                Button("Logout") {
+                    Task {
+                        await controller.logout()
+                    }
+                }
+                .buttonStyle(SecondaryActionButtonStyle())
             }
         }
+        .padding(14)
+        .frame(maxHeight: .infinity, alignment: .top)
+    }
+}
+
+private struct WorkspaceSurface: View {
+    @ObservedObject var controller: FloController
+    let activeStage: AppFlowStage
+    @Binding var settingsSearchQuery: String
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(activeStage.title)
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(FloTheme.textPrimary)
+                    Text(activeStage.subtitle)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(FloTheme.textSecondary)
+                }
+                Spacer()
+                if activeStage == .settings {
+                    ToolbarSearchField(text: $settingsSearchQuery)
+                        .frame(width: 320)
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 20)
+            .padding(.bottom, 14)
+
+            Divider()
+                .overlay(Color.white.opacity(0.14))
+
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 16) {
+                    Group {
+                        switch activeStage {
+                        case .login:
+                            LoginStageView(controller: controller)
+                        case .permissions:
+                            PermissionStageView(controller: controller)
+                        case .settings:
+                            SettingsStageView(controller: controller, searchQuery: $settingsSearchQuery)
+                        case .voice:
+                            VoiceStudioStageView(controller: controller)
+                        }
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .animation(.easeInOut(duration: 0.2), value: activeStage)
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct ToolbarSearchField: View {
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(FloTheme.textSecondary)
+
+            TextField("Search settings", text: $text)
+                .textFieldStyle(.plain)
+                .foregroundStyle(FloTheme.textPrimary)
+
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(FloTheme.textSecondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(0.10))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+        )
+    }
+}
+
+private struct SidebarStageButtonStyle: ButtonStyle {
+    let isActive: Bool
+    let isEnabled: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(isActive ? FloTheme.textPrimary : FloTheme.textSecondary)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isActive ? FloTheme.accent.opacity(configuration.isPressed ? 0.30 : 0.22) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(isActive ? FloTheme.accent.opacity(0.40) : Color.white.opacity(0.08), lineWidth: 1)
+            )
+            .opacity(isEnabled ? 1 : 0.45)
+    }
+}
+
+private func recorderStateColor(_ state: RecorderState) -> Color {
+    switch state {
+    case .error:
+        return FloTheme.danger
+    case .listening, .transcribing, .injecting, .speaking:
+        return FloTheme.accentSoft
+    case .idle:
+        return FloTheme.accent
     }
 }
 
@@ -273,11 +524,11 @@ private struct LoginStageView: View {
         CardContainer {
             VStack(alignment: .leading, spacing: 16) {
                 Text(usesGeminiProvider ? "Configure Gemini API Key" : "Login with OpenAI")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(FloTheme.textPrimary)
 
                 Text(subtitle)
-                    .foregroundStyle(Color.white.opacity(0.8))
+                    .foregroundStyle(FloTheme.textSecondary)
                     .font(.system(size: 14, weight: .medium))
 
                 if let blocker = controller.oauthBlockerMessage {
@@ -321,12 +572,12 @@ private struct LoginStageView: View {
                         if let sourceLabel = controller.providerCredentialSourceLabel {
                             Text(sourceLabel)
                                 .font(.caption)
-                                .foregroundStyle(Color.white.opacity(0.65))
+                                .foregroundStyle(FloTheme.textSecondary)
                         }
 
                         Text("Optional fallback: set FLO_GEMINI_API_KEY in .env.local.")
                             .font(.caption)
-                            .foregroundStyle(Color.white.opacity(0.62))
+                            .foregroundStyle(FloTheme.textSecondary)
                     }
                 } else {
                     Button {
@@ -370,18 +621,18 @@ private struct PermissionStageView: View {
         CardContainer {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Grant Required Permissions")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(FloTheme.textPrimary)
 
                 Text("flo needs microphone, accessibility, and input monitoring access to run global shortcuts and insert text safely.")
-                    .foregroundStyle(Color.white.opacity(0.8))
+                    .foregroundStyle(FloTheme.textSecondary)
                     .font(.system(size: 14, weight: .medium))
 
                 PermissionManagementPanel(controller: controller, showPrimaryPrompt: true)
 
                 Text("If flo is not listed yet, launch the bundled `FloApp.app` once from Finder, then retry permission grant.")
                     .font(.caption)
-                    .foregroundStyle(Color.white.opacity(0.62))
+                    .foregroundStyle(FloTheme.textSecondary)
             }
         }
         .onAppear {
@@ -398,17 +649,18 @@ private struct PermissionStageView: View {
 
 private struct SettingsStageView: View {
     @ObservedObject var controller: FloController
+    @Binding var searchQuery: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             CardContainer {
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Settings")
-                            .font(.system(size: 26, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
+                        Text("Workspace Settings")
+                            .font(.system(size: 24, weight: .semibold))
+                            .foregroundStyle(FloTheme.textPrimary)
                         Text("Tune shortcuts, voice output, permissions, and history.")
-                            .foregroundStyle(Color.white.opacity(0.8))
+                            .foregroundStyle(FloTheme.textSecondary)
                     }
 
                     Spacer()
@@ -427,16 +679,16 @@ private struct SettingsStageView: View {
                 InlineNotice(text: statusMessage, tone: .info)
             }
 
-            if !controller.onboardingHotkeyConfirmed {
+            if showOnboardingCard {
                 CardContainer {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Confirm Hotkey Setup")
                             .font(.headline)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(FloTheme.textPrimary)
 
                         Text("Review your hotkeys once, then mark setup as complete.")
                             .font(.subheadline)
-                            .foregroundStyle(Color.white.opacity(0.75))
+                            .foregroundStyle(FloTheme.textSecondary)
 
                         Button("Confirm hotkeys") {
                             controller.completeHotkeyConfirmation()
@@ -447,56 +699,538 @@ private struct SettingsStageView: View {
                 }
             }
 
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 16) {
-                    VStack(spacing: 16) {
-                        CardContainer {
-                            PermissionManagementPanel(controller: controller, showPrimaryPrompt: false)
-                        }
-                        CardContainer {
-                            VoiceConfigurationSection(controller: controller)
-                        }
-                        CardContainer {
-                            DictationStyleConfigurationSection(controller: controller)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .top)
-
-                    VStack(spacing: 16) {
-                        CardContainer {
-                            ShortcutConfigurationSection(controller: controller)
-                        }
-                        CardContainer {
-                            UtilityActionsSection(controller: controller)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .top)
-                }
-
-                VStack(spacing: 16) {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 360), spacing: 16, alignment: .top)],
+                alignment: .leading,
+                spacing: 16
+            ) {
+                if showPermissionsSection {
                     CardContainer {
                         PermissionManagementPanel(controller: controller, showPrimaryPrompt: false)
                     }
+                }
+                if showHotkeysSection {
                     CardContainer {
                         ShortcutConfigurationSection(controller: controller)
                     }
-                    CardContainer {
-                        VoiceConfigurationSection(controller: controller)
-                    }
+                }
+                if showDictationSection {
                     CardContainer {
                         DictationStyleConfigurationSection(controller: controller)
                     }
+                }
+                if showSystemSection {
                     CardContainer {
                         UtilityActionsSection(controller: controller)
                     }
                 }
             }
 
-            CardContainer {
-                HistorySection(entries: Array(controller.historyEntries.prefix(30)))
+            if showEmptyState {
+                CardContainer {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("No settings match")
+                            .font(.headline)
+                            .foregroundStyle(FloTheme.textPrimary)
+                        Text("Try a different search keyword or clear the filter.")
+                            .font(.subheadline)
+                            .foregroundStyle(FloTheme.textSecondary)
+                        Button("Clear search") {
+                            searchQuery = ""
+                        }
+                        .buttonStyle(SecondaryActionButtonStyle())
+                    }
+                }
+            }
+
+            if showVoiceRedirectSection {
+                CardContainer {
+                    HStack(alignment: .center, spacing: 12) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(FloTheme.accentSoft)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Voice controls moved to Voice tab")
+                                .font(.headline)
+                                .foregroundStyle(FloTheme.textPrimary)
+                            Text("Use the sidebar Voice tab to switch voices with arrow controls and immersive live orb feedback.")
+                                .font(.subheadline)
+                                .foregroundStyle(FloTheme.textSecondary)
+                        }
+                    }
+                }
+            }
+
+            if showHistorySection {
+                CardContainer {
+                    HistorySection(entries: Array(controller.historyEntries.prefix(30)))
+                }
             }
         }
     }
+
+    private var searchTerms: [String] {
+        searchQuery
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .split(separator: " ")
+            .map(String.init)
+    }
+
+    private func matches(_ keywords: [String]) -> Bool {
+        guard !searchTerms.isEmpty else {
+            return true
+        }
+        let haystack = keywords.joined(separator: " ").lowercased()
+        return searchTerms.allSatisfy { haystack.contains($0) }
+    }
+
+    private var showPermissionsSection: Bool {
+        matches(["permissions", "microphone", "accessibility", "input monitoring", "grant"])
+    }
+
+    private var showHotkeysSection: Bool {
+        matches(["shortcut", "hotkey", "dictation hold", "read selected", "custom key", "keyboard"])
+    }
+
+    private var showDictationSection: Bool {
+        matches(["dictation", "rewrite", "tone", "warmth", "enthusiasm", "emoji", "instructions"])
+    }
+
+    private var showSystemSection: Bool {
+        matches(["system", "history", "live typing", "refresh", "updates", "clear"])
+    }
+
+    private var showHistorySection: Bool {
+        matches(["history", "activity", "latency", "request", "success", "failed"])
+    }
+
+    private var showVoiceRedirectSection: Bool {
+        matches(["voice", "audio", "preview", "speaker", "orb"])
+    }
+
+    private var showOnboardingCard: Bool {
+        !controller.onboardingHotkeyConfirmed && matches(["hotkey", "onboarding", "confirm", "setup"])
+    }
+
+    private var showEmptyState: Bool {
+        !searchTerms.isEmpty &&
+            !showPermissionsSection &&
+            !showHotkeysSection &&
+            !showDictationSection &&
+            !showSystemSection &&
+            !showHistorySection &&
+            !showVoiceRedirectSection &&
+            !showOnboardingCard
+    }
+}
+
+private struct VoiceStudioStageView: View {
+    @ObservedObject var controller: FloController
+
+    private var voices: [String] {
+        controller.supportedVoices
+    }
+
+    private var selectedVoiceIndex: Int {
+        guard !voices.isEmpty else {
+            return 0
+        }
+        return voices.firstIndex(of: controller.voicePreferences.voice) ?? 0
+    }
+
+    private var activityLevel: Double {
+        min(1, max(Double(controller.latestAudioLevel), controller.isVoicePreviewInProgress ? 0.58 : 0.12))
+    }
+
+    private var canPreviewVoice: Bool {
+        controller.isAuthenticated &&
+            !controller.isVoicePreviewInProgress &&
+            controller.recorderState == .idle
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(spacing: 22) {
+                AtmosphericVoiceOrb(
+                    activityLevel: activityLevel,
+                    isActive: controller.isVoicePreviewInProgress || controller.recorderState == .listening
+                )
+                .frame(maxWidth: .infinity)
+
+                HStack(spacing: 14) {
+                    Button {
+                        shiftVoice(by: -1)
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 14, weight: .semibold))
+                            .frame(width: 34, height: 34)
+                    }
+                    .buttonStyle(OrbDirectionButtonStyle())
+                    .disabled(voices.count < 2 || !controller.isAuthenticated || controller.isVoicePreviewInProgress)
+                    .accessibilityLabel("Previous voice")
+
+                    VStack(spacing: 4) {
+                        Text(voices.isEmpty ? "No voices available" : voices[selectedVoiceIndex].capitalized)
+                            .font(.system(size: 19, weight: .semibold))
+                            .foregroundStyle(FloTheme.textPrimary)
+                        Text(voices.isEmpty ? "" : "Voice \(selectedVoiceIndex + 1) of \(voices.count)")
+                            .font(.caption)
+                            .foregroundStyle(FloTheme.textSecondary)
+                    }
+                    .frame(minWidth: 260)
+
+                    Button {
+                        shiftVoice(by: 1)
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .frame(width: 34, height: 34)
+                    }
+                    .buttonStyle(OrbDirectionButtonStyle())
+                    .disabled(voices.count < 2 || !controller.isAuthenticated || controller.isVoicePreviewInProgress)
+                    .accessibilityLabel("Next voice")
+                }
+
+                GeometryReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(Array(voices.enumerated()), id: \.offset) { index, voice in
+                                Button(voice.capitalized) {
+                                    applyVoice(at: index, previewAfterSelection: true)
+                                }
+                                .buttonStyle(VoiceChipButtonStyle(isSelected: index == selectedVoiceIndex))
+                                .disabled(!controller.isAuthenticated || controller.isVoicePreviewInProgress)
+                            }
+                        }
+                        .padding(.horizontal, 2)
+                        .frame(minWidth: proxy.size.width, alignment: .center)
+                    }
+                }
+                .frame(maxWidth: 620)
+                .frame(height: 34)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 8)
+
+            SectionDivider()
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Interaction")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(FloTheme.textSecondary)
+
+                HStack(spacing: 10) {
+                    Text("Speed \(String(format: "%.2f", controller.voicePreferences.speed))x")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(FloTheme.textPrimary)
+                        .frame(width: 138, alignment: .leading)
+                    Slider(value: speedBinding, in: VoiceCatalog.speedRange, step: 0.05)
+                        .disabled(!controller.isAuthenticated)
+                        .accessibilityLabel("Voice speed")
+                    Button(controller.isVoicePreviewInProgress ? "Speaking..." : "Speak sample") {
+                        Task {
+                            await controller.previewCurrentVoice()
+                        }
+                    }
+                    .buttonStyle(PrimaryActionButtonStyle())
+                    .disabled(!canPreviewVoice)
+                }
+
+                Text("Use left and right arrows to cycle voices. Each switch triggers spoken preview for immediate feedback.")
+                    .font(.caption)
+                    .foregroundStyle(FloTheme.textSecondary)
+            }
+
+            if let statusMessage = controller.statusMessage, !statusMessage.isEmpty {
+                InlineNotice(text: statusMessage, tone: .info)
+            }
+        }
+        .onAppear {
+            guard !voices.isEmpty else {
+                return
+            }
+            if !voices.contains(controller.voicePreferences.voice) {
+                controller.updateVoice(voices[0])
+            }
+        }
+    }
+
+    private var speedBinding: Binding<Double> {
+        Binding(
+            get: { controller.voicePreferences.speed },
+            set: { controller.updateVoiceSpeed($0) }
+        )
+    }
+
+    private func shiftVoice(by step: Int) {
+        guard !voices.isEmpty else {
+            return
+        }
+        var next = selectedVoiceIndex + step
+        if next < 0 {
+            next = voices.count - 1
+        } else if next >= voices.count {
+            next = 0
+        }
+        applyVoice(at: next, previewAfterSelection: true)
+    }
+
+    private func applyVoice(at index: Int, previewAfterSelection: Bool) {
+        guard voices.indices.contains(index) else {
+            return
+        }
+        let voice = voices[index]
+        if controller.voicePreferences.voice != voice {
+            controller.updateVoice(voice)
+        }
+        guard previewAfterSelection else {
+            return
+        }
+        Task {
+            await controller.previewCurrentVoice()
+        }
+    }
+}
+
+private struct AtmosphericVoiceOrb: View {
+    let activityLevel: Double
+    let isActive: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: false)) { context in
+            let phase = context.date.timeIntervalSinceReferenceDate
+            let clampedActivity = min(max(activityLevel, 0), 1)
+            let breathingScale = reduceMotion ? 1 : 1 + (0.02 * sin(phase * 0.7))
+
+            ZStack {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color(red: 0.31, green: 0.52, blue: 0.99).opacity(0.55),
+                                Color(red: 0.25, green: 0.78, blue: 1.0).opacity(0.20),
+                                .clear
+                            ],
+                            center: .center,
+                            startRadius: 10,
+                            endRadius: 190
+                        )
+                    )
+                    .blur(radius: 28)
+                    .scaleEffect(1.16 + (0.03 * clampedActivity))
+
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            stops: [
+                                .init(color: Color(red: 0.95, green: 0.98, blue: 1).opacity(0.92), location: 0),
+                                .init(color: Color(red: 0.72, green: 0.90, blue: 1).opacity(0.88), location: 0.30),
+                                .init(color: Color(red: 0.24, green: 0.57, blue: 1).opacity(0.92), location: 0.58),
+                                .init(color: Color(red: 0.55, green: 0.50, blue: 1).opacity(0.84), location: 0.80),
+                                .init(color: Color(red: 0.78, green: 0.45, blue: 0.97).opacity(0.66), location: 1)
+                            ],
+                            center: UnitPoint(
+                                x: CGFloat(0.46 + (0.08 * sin(phase * 0.22))),
+                                y: CGFloat(0.34 + (0.06 * cos(phase * 0.19)))
+                            ),
+                            startRadius: 12,
+                            endRadius: 170
+                        )
+                    )
+                    .overlay(
+                        Circle()
+                            .fill(
+                                RadialGradient(
+                                    colors: [
+                                        Color.white.opacity(0.24),
+                                        Color(red: 0.73, green: 0.90, blue: 1).opacity(0.10),
+                                        .clear
+                                    ],
+                                    center: .topLeading,
+                                    startRadius: 4,
+                                    endRadius: 120
+                                )
+                            )
+                            .blur(radius: 9)
+                    )
+                    .overlay(
+                        OrbWaveInterference(phase: phase, activityLevel: clampedActivity)
+                            .clipShape(Circle())
+                    )
+                    .overlay(
+                        OrbNoiseTexture(phase: phase)
+                            .clipShape(Circle())
+                            .opacity(0.14)
+                    )
+                    .overlay(
+                        Circle()
+                            .strokeBorder(Color.white.opacity(0.17), lineWidth: 1)
+                    )
+                    .shadow(color: Color(red: 0.20, green: 0.64, blue: 1).opacity(0.32), radius: 30)
+
+                OrbParticleMist(phase: phase, activityLevel: clampedActivity)
+            }
+            .frame(width: 360, height: 360)
+            .compositingGroup()
+            .scaleEffect(isActive ? breathingScale : 1)
+            .animation(.easeInOut(duration: 0.45), value: isActive)
+        }
+    }
+}
+
+private struct OrbWaveInterference: View {
+    let phase: Double
+    let activityLevel: Double
+
+    var body: some View {
+        Canvas { context, size in
+            let steps = 260
+            let radius = Double((min(size.width, size.height) / 2) - 4)
+            var path = Path()
+
+            for step in 0...steps {
+                let progress = Double(step) / Double(steps)
+                let angle = progress * .pi * 2
+                let primary = sin((angle * 5.3) + (phase * 1.5))
+                let secondary = cos((angle * 10.1) - (phase * 1.8))
+                let ripple = sin((angle * 21.8) + (phase * 2.6))
+                let displacement = (primary * (2.4 + (activityLevel * 5.2))) +
+                    (secondary * (1.2 + (activityLevel * 2.7))) +
+                    (ripple * (0.5 + (activityLevel * 1.8)))
+
+                let x = Double(size.width / 2) + (cos(angle) * (radius + displacement))
+                let y = Double(size.height / 2) + (sin(angle) * (radius + displacement))
+                let point = CGPoint(x: CGFloat(x), y: CGFloat(y))
+
+                if step == 0 {
+                    path.move(to: point)
+                } else {
+                    path.addLine(to: point)
+                }
+            }
+            path.closeSubpath()
+
+            var glowContext = context
+            glowContext.addFilter(.blur(radius: 2.2))
+            glowContext.stroke(path, with: .color(Color(red: 0.70, green: 0.88, blue: 1).opacity(0.34)), lineWidth: 3)
+            context.stroke(path, with: .color(Color.white.opacity(0.36)), lineWidth: 1.15)
+        }
+    }
+}
+
+private struct OrbNoiseTexture: View {
+    let phase: Double
+
+    var body: some View {
+        Canvas { context, size in
+            for index in 0..<420 {
+                let seed = Double(index) * 0.913
+                let x = CGFloat(pseudoRandom(seed * 13.13)) * size.width
+                let y = CGFloat(pseudoRandom(seed * 41.71)) * size.height
+                let sizeValue = CGFloat(0.7 + (pseudoRandom(seed * 7.17) * 1.2))
+                let alpha = 0.012 + (pseudoRandom(seed + (phase * 0.01)) * 0.035)
+                let rect = CGRect(x: x, y: y, width: sizeValue, height: sizeValue)
+                context.fill(Path(ellipseIn: rect), with: .color(Color.white.opacity(alpha)))
+            }
+        }
+    }
+}
+
+private struct OrbParticleMist: View {
+    let phase: Double
+    let activityLevel: Double
+
+    var body: some View {
+        GeometryReader { proxy in
+            let diameter = min(proxy.size.width, proxy.size.height)
+            let baseRadius = Double(diameter * 0.56)
+            ZStack {
+                ForEach(0..<24, id: \.self) { index in
+                    let seed = Double(index) * 0.77
+                    let angularVelocity = 0.05 + (Double(index % 5) * 0.006)
+                    let angle = (phase * angularVelocity) + (seed * 3.2)
+                    let drift = sin((phase * 0.9) + (seed * 4.4)) * (8 + (activityLevel * 14))
+                    let radius = baseRadius + drift
+                    let x = CGFloat(Double(proxy.size.width / 2) + (cos(angle) * radius))
+                    let y = CGFloat(Double(proxy.size.height / 2) + (sin(angle) * radius))
+                    let particleSize = CGFloat(1.8 + (pseudoRandom(seed * 2.6) * 3.2))
+                    let opacity = 0.14 + (pseudoRandom(seed * 9.3) * 0.24)
+
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.74, green: 0.90, blue: 1).opacity(opacity),
+                                    Color(red: 0.63, green: 0.55, blue: 0.98).opacity(opacity * 0.55)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: particleSize, height: particleSize)
+                        .position(x: x, y: y)
+                        .blur(radius: 0.8)
+                }
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+private struct OrbDirectionButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(FloTheme.textPrimary)
+            .background(
+                Circle()
+                    .fill(Color.white.opacity(configuration.isPressed ? 0.15 : 0.09))
+            )
+            .overlay(
+                Circle()
+                    .strokeBorder(Color.white.opacity(0.13), lineWidth: 1)
+            )
+    }
+}
+
+private struct VoiceChipButtonStyle: ButtonStyle {
+    let isSelected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(isSelected ? FloTheme.textPrimary : FloTheme.textSecondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isSelected ? FloTheme.accent.opacity(configuration.isPressed ? 0.22 : 0.30) : Color.white.opacity(0.06))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(isSelected ? FloTheme.accent.opacity(0.45) : Color.white.opacity(0.12), lineWidth: 1)
+            )
+    }
+}
+
+private struct SectionDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [.clear, Color.white.opacity(0.16), .clear],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .frame(height: 1)
+    }
+}
+
+private func pseudoRandom(_ value: Double) -> Double {
+    let raw = sin(value * 12.9898) * 43758.5453
+    return raw - floor(raw)
 }
 
 private struct PermissionManagementPanel: View {
@@ -1175,28 +1909,12 @@ private struct CardContainer<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        content
-            .padding(20)
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(Color.white.opacity(0.06))
-            )
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.27), Color.white.opacity(0.05)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1
-                    )
-            )
-            .shadow(color: Color.black.opacity(0.22), radius: 26, x: 0, y: 14)
+        VStack(alignment: .leading, spacing: 12) {
+            content
+                .padding(.horizontal, 2)
+                .padding(.vertical, 4)
+            SectionDivider()
+        }
     }
 }
 
@@ -1207,16 +1925,16 @@ private struct StatusChip: View {
     var body: some View {
         Text(text)
             .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(.white)
-            .padding(.vertical, 5)
-            .padding(.horizontal, 10)
+            .foregroundStyle(FloTheme.textPrimary)
+            .padding(.vertical, 4)
+            .padding(.horizontal, 9)
             .background(
-                Capsule(style: .continuous)
-                    .fill(color.opacity(0.26))
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(color.opacity(0.22))
             )
             .overlay(
-                Capsule(style: .continuous)
-                    .strokeBorder(color.opacity(0.52), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(color.opacity(0.40), lineWidth: 1)
             )
     }
 }
@@ -1235,18 +1953,18 @@ private struct InlineNotice: View {
             Image(systemName: tone == .error ? "exclamationmark.circle.fill" : "info.circle.fill")
                 .font(.system(size: 13, weight: .semibold))
             Text(text)
-                .font(.subheadline)
+                .font(.subheadline.weight(.medium))
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(FloTheme.textPrimary)
         .padding(.vertical, 8)
         .padding(.horizontal, 10)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill((tone == .error ? FloTheme.danger : FloTheme.accent).opacity(0.22))
+                .fill((tone == .error ? FloTheme.danger : FloTheme.accent).opacity(0.16))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder((tone == .error ? FloTheme.danger : FloTheme.accent).opacity(0.5), lineWidth: 1)
+                .strokeBorder((tone == .error ? FloTheme.danger : FloTheme.accent).opacity(0.34), lineWidth: 1)
         )
     }
 }
@@ -1257,25 +1975,28 @@ private struct PrimaryActionButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(Color.white.opacity(isEnabled ? 1 : 0.7))
+            .foregroundStyle(Color.white.opacity(isEnabled ? 1 : 0.72))
             .padding(.vertical, 11)
             .padding(.horizontal, 16)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [FloTheme.accent, FloTheme.accentSoft],
+                            colors: [
+                                FloTheme.accent.opacity(configuration.isPressed ? 0.9 : 1),
+                                FloTheme.accentSoft.opacity(configuration.isPressed ? 0.9 : 1)
+                            ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
             )
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
-            .opacity(isEnabled ? 1 : 0.55)
+            .opacity(isEnabled ? 1 : 0.52)
             .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
     }
 }
@@ -1286,16 +2007,16 @@ private struct SecondaryActionButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(Color.white.opacity(isEnabled ? 0.96 : 0.65))
+            .foregroundStyle(Color.white.opacity(isEnabled ? 0.94 : 0.64))
             .padding(.vertical, 8)
             .padding(.horizontal, 12)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.white.opacity(configuration.isPressed ? 0.19 : 0.12))
+                    .fill(Color.white.opacity(configuration.isPressed ? 0.14 : 0.09))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+                    .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
             )
             .opacity(isEnabled ? 1 : 0.55)
     }
