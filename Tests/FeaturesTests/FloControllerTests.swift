@@ -240,6 +240,59 @@ struct FloControllerTests {
 
     @Test
     @MainActor
+    func pasteLastTranscriptInsertsMostRecentDictation() async {
+        let dependencies = TestDependencies(configuration: makeConfiguration(oauth: sampleOAuthConfiguration()))
+        dependencies.authService.restoredSession = sampleSession()
+
+        let controller = FloController(environment: dependencies.environment)
+        await controller.bootstrap()
+        await controller.startDictationFromHotkey()
+        await controller.stopDictationFromHotkey()
+
+        dependencies.textInjectionService.injectedTexts.removeAll()
+        controller.pasteLastTranscript()
+
+        #expect(controller.canPasteLastTranscript == true)
+        #expect(controller.lastDictationTranscript == "mock")
+        #expect(dependencies.textInjectionService.injectedTexts.last == "mock")
+        #expect(controller.statusMessage == "Inserted last transcript.")
+    }
+
+    @Test
+    @MainActor
+    func pasteLastTranscriptWithoutHistoryShowsExplicitMessage() {
+        let dependencies = TestDependencies(configuration: makeConfiguration(oauth: sampleOAuthConfiguration()))
+        let controller = FloController(environment: dependencies.environment)
+
+        controller.pasteLastTranscript()
+
+        #expect(controller.canPasteLastTranscript == false)
+        #expect(controller.lastDictationTranscript == nil)
+        #expect(controller.statusMessage == "No transcript available yet.")
+    }
+
+    @Test
+    @MainActor
+    func pasteLastTranscriptFallsBackToClipboardOnInjectionFailure() async {
+        setSystemClipboardText("seed")
+
+        let dependencies = TestDependencies(configuration: makeConfiguration(oauth: sampleOAuthConfiguration()))
+        dependencies.authService.restoredSession = sampleSession()
+
+        let controller = FloController(environment: dependencies.environment)
+        await controller.bootstrap()
+        await controller.startDictationFromHotkey()
+        await controller.stopDictationFromHotkey()
+
+        dependencies.textInjectionService.error = FloError.injectionFailed
+        controller.pasteLastTranscript()
+
+        #expect(controller.statusMessage?.contains("Last transcript copied to clipboard.") == true)
+        #expect(systemClipboardText() == "mock")
+    }
+
+    @Test
+    @MainActor
     func liveDictationInjectsPartialTranscriptWhileListening() async {
         let dependencies = TestDependencies(configuration: makeConfiguration(oauth: sampleOAuthConfiguration()))
         dependencies.authService.restoredSession = sampleSession()

@@ -5,6 +5,7 @@ import SwiftUI
 
 @main
 struct FloDesktopApp: App {
+    fileprivate static let mainWindowID = "flo.main-window"
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var controller: FloController
 
@@ -14,7 +15,7 @@ struct FloDesktopApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("flo") {
+        WindowGroup("flo", id: Self.mainWindowID) {
             RootView(controller: controller)
                 .containerBackground(.clear, for: .window)
                 .task {
@@ -28,50 +29,122 @@ struct FloDesktopApp: App {
         }
 
         MenuBarExtra("flo", systemImage: "waveform") {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Recorder: \(controller.recorderState.label)")
-                if let statusMessage = controller.statusMessage {
-                    Text(statusMessage)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+            StatusBarMenuContent(controller: controller)
+        }
+        .menuBarExtraStyle(.menu)
+    }
+}
 
+private enum StatusBarNavigationTarget: String {
+    case home
+    case shortcuts
+    case permissions
+    case voice
+}
+
+private extension Notification.Name {
+    static let floNavigateToStage = Notification.Name("flo.navigate.to.stage")
+}
+
+private struct StatusBarMenuContent: View {
+    @ObservedObject var controller: FloController
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("Home") {
+            openApp(.home)
+        }
+
+        Divider()
+
+        Button("Paste last transcript") {
+            controller.pasteLastTranscript()
+        }
+        .keyboardShortcut("v", modifiers: [.command, .control])
+        .disabled(!controller.canPasteLastTranscript)
+
+        Divider()
+
+        Button("Shortcuts") {
+            openApp(.shortcuts)
+        }
+
+        Menu("Microphone") {
+            switch controller.permissionStatus.microphone {
+            case .granted:
+                Text("Access granted")
+                    .disabled(true)
+            case .notDetermined:
+                Button("Request access") {
+                    Task {
+                        await controller.requestMicrophoneAccess()
+                    }
+                }
+            case .denied:
+                Button("Open System Settings") {
+                    controller.openSystemSettings(for: .microphone)
+                }
+            }
+
+            Divider()
+
+            Button("Open Permissions in flo") {
+                openApp(.permissions)
+            }
+        }
+
+        Menu("Languages") {
+            Button("Open Voice settings") {
+                openApp(.voice)
+            }
+
+            if !controller.supportedVoices.isEmpty {
                 Divider()
-
-                Button("Refresh Permissions") {
-                    controller.refreshPermissions()
-                }
-
-                if let updateURL = controller.manualUpdateURL {
-                    Button("Check for Updates") {
-                        NSWorkspace.shared.open(updateURL)
-                    }
-                }
-
-                if controller.isAuthenticated {
-                    Button("Logout") {
-                        Task {
-                            await controller.logout()
+                ForEach(controller.supportedVoices, id: \.self) { voice in
+                    Button {
+                        controller.updateVoice(voice)
+                    } label: {
+                        if voice == controller.voicePreferences.voice {
+                            Label(voice.capitalized, systemImage: "checkmark")
+                        } else {
+                            Text(voice.capitalized)
                         }
-                    }
-                } else {
-                    if controller.authProviderDisplayName == "Gemini" {
-                        Text("Open flo window to save Gemini API key")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Button("Login with OpenAI") {
-                            Task {
-                                await controller.login()
-                            }
-                        }
-                        .disabled(!controller.canAttemptLogin)
                     }
                 }
             }
-            .padding()
-            .frame(width: 320)
         }
+
+        Divider()
+
+        Button("Quit flo") {
+            NSApp.terminate(nil)
+        }
+        .keyboardShortcut("q", modifiers: [.command])
+    }
+
+    private func openApp(_ target: StatusBarNavigationTarget) {
+        NotificationCenter.default.post(
+            name: .floNavigateToStage,
+            object: target.rawValue
+        )
+
+        NSApp.activate(ignoringOtherApps: true)
+        if !focusExistingWindow() {
+            openWindow(id: FloDesktopApp.mainWindowID)
+            DispatchQueue.main.async {
+                _ = focusExistingWindow()
+            }
+        }
+    }
+
+    @discardableResult
+    private func focusExistingWindow() -> Bool {
+        guard let window = NSApp.windows.first(where: { $0.canBecomeMain }) else {
+            return false
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        return true
     }
 }
 
@@ -220,6 +293,35 @@ private struct RootView: View {
             if newStage != .settings {
                 settingsSearchQuery = ""
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .floNavigateToStage)) { notification in
+            guard let targetRaw = notification.object as? String,
+                  let target = StatusBarNavigationTarget(rawValue: targetRaw)
+            else {
+                return
+            }
+            navigate(to: target)
+        }
+    }
+
+    private func navigate(to target: StatusBarNavigationTarget) {
+        switch target {
+        case .home:
+            settingsSearchQuery = ""
+            selectedStage = currentStage
+        case .shortcuts:
+            settingsSearchQuery = "shortcut"
+            selectedStage = .settings
+        case .permissions:
+            settingsSearchQuery = ""
+            selectedStage = .permissions
+        case .voice:
+            settingsSearchQuery = ""
+            selectedStage = .voice
+        }
+
+        if !availableStages.contains(selectedStage) {
+            selectedStage = currentStage
         }
     }
 }

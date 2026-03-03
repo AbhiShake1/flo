@@ -55,6 +55,18 @@ public final class FloController: ObservableObject {
         environment.configuration.manualUpdateURL
     }
 
+    public var lastDictationTranscript: String? {
+        guard let entry = historyEntries.first(where: { $0.kind == .dictation && $0.success }) else {
+            return nil
+        }
+        let candidate = (entry.outputText ?? entry.inputText).trimmingCharacters(in: .whitespacesAndNewlines)
+        return candidate.isEmpty ? nil : candidate
+    }
+
+    public var canPasteLastTranscript: Bool {
+        lastDictationTranscript != nil
+    }
+
     public var missingPermissions: [PermissionKind] {
         var missing: [PermissionKind] = []
         if permissionStatus.microphone != .granted {
@@ -440,6 +452,26 @@ public final class FloController: ObservableObject {
         configureHotkeysIfAllowed()
         configureFloatingBarActions()
         environment.logger.info("Shortcuts reset to defaults.")
+    }
+
+    public func pasteLastTranscript() {
+        guard let transcript = lastDictationTranscript else {
+            statusMessage = "No transcript available yet."
+            return
+        }
+
+        do {
+            try ensurePermissionStatusForInjection()
+            try environment.textInjectionService.inject(text: transcript)
+            statusMessage = "Inserted last transcript."
+        } catch {
+            let copied = copyToClipboard(transcript)
+            let errorMessage = localizedMessage(for: error)
+            statusMessage = copied
+                ? "\(errorMessage) Last transcript copied to clipboard."
+                : "\(errorMessage) Could not copy last transcript to clipboard."
+            environment.logger.error("Paste last transcript failed: \(errorMessage)")
+        }
     }
 
     public func updateVoice(_ voice: String) {
