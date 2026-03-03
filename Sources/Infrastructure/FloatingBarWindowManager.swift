@@ -5,10 +5,10 @@ import Foundation
 @MainActor
 public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
     private enum Metrics {
-        static let collapsedWidth: CGFloat = 74
+        static let collapsedWidth: CGFloat = 37
         static let expandedErrorWidth: CGFloat = 320
         static let pillHeight: CGFloat = 9
-        static let rightSectionWidth: CGFloat = 20
+        static let rightSectionWidth: CGFloat = 9
         static let horizontalPadding: CGFloat = 5
         static let dividerInset: CGFloat = 3
         static let panelBottomInset: CGFloat = 14
