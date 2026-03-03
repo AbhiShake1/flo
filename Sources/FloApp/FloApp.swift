@@ -79,6 +79,7 @@ private enum AppFlowStage: Int, CaseIterable {
     case login
     case permissions
     case settings
+    case history
     case voice
 
     var title: String {
@@ -89,6 +90,8 @@ private enum AppFlowStage: Int, CaseIterable {
             return "Permissions"
         case .settings:
             return "Settings"
+        case .history:
+            return "History"
         case .voice:
             return "Voice"
         }
@@ -101,7 +104,9 @@ private enum AppFlowStage: Int, CaseIterable {
         case .permissions:
             return "System permission management"
         case .settings:
-            return "Shortcuts, dictation, and history"
+            return "Shortcuts, dictation, and system controls"
+        case .history:
+            return "Session events and recent activity"
         case .voice:
             return "Immersive voice interaction"
         }
@@ -115,6 +120,8 @@ private enum AppFlowStage: Int, CaseIterable {
             return "checkmark.shield"
         case .settings:
             return "switch.2"
+        case .history:
+            return "clock.arrow.circlepath"
         case .voice:
             return "sparkles"
         }
@@ -160,7 +167,7 @@ private struct RootView: View {
             return [.login]
         case .permissions:
             return [.login, .permissions]
-        case .settings, .voice:
+        case .settings, .history, .voice:
             return Set(AppFlowStage.allCases)
         }
     }
@@ -529,6 +536,8 @@ private struct WorkspaceSurface: View {
                             PermissionStageView(controller: controller)
                         case .settings:
                             SettingsStageView(controller: controller, searchQuery: $settingsSearchQuery)
+                        case .history:
+                            HistoryStageView(controller: controller)
                         case .voice:
                             VoiceStudioStageView(controller: controller)
                         }
@@ -810,7 +819,7 @@ private struct SettingsStageView: View {
                         Text("Workspace Settings")
                             .font(.system(size: 24, weight: .semibold))
                             .foregroundStyle(FloTheme.textPrimary)
-                        Text("Tune shortcuts, voice output, permissions, and history.")
+                        Text("Tune shortcuts, voice output, permissions, and core system controls.")
                             .foregroundStyle(FloTheme.textSecondary)
                     }
 
@@ -912,11 +921,24 @@ private struct SettingsStageView: View {
                 }
             }
 
-            if showHistorySection {
+            if showHistoryRedirectSection {
                 CardContainer {
-                    HistorySection(entries: Array(controller.historyEntries.prefix(30)))
+                    HStack(alignment: .center, spacing: 12) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(FloTheme.accentSoft)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("History moved to History tab")
+                                .font(.headline)
+                                .foregroundStyle(FloTheme.textPrimary)
+                            Text("Use the sidebar History tab for recent activity, latency details, and history clearing.")
+                                .font(.subheadline)
+                                .foregroundStyle(FloTheme.textSecondary)
+                        }
+                    }
                 }
             }
+
         }
     }
 
@@ -949,15 +971,15 @@ private struct SettingsStageView: View {
     }
 
     private var showSystemSection: Bool {
-        matches(["system", "history", "live typing", "refresh", "updates", "clear"])
-    }
-
-    private var showHistorySection: Bool {
-        matches(["history", "activity", "latency", "request", "success", "failed"])
+        matches(["system", "live typing", "refresh", "updates"])
     }
 
     private var showVoiceRedirectSection: Bool {
         matches(["voice", "audio", "preview", "speaker", "orb"])
+    }
+
+    private var showHistoryRedirectSection: Bool {
+        matches(["history", "activity", "latency", "request", "success", "failed"])
     }
 
     private var showOnboardingCard: Bool {
@@ -970,9 +992,45 @@ private struct SettingsStageView: View {
             !showHotkeysSection &&
             !showDictationSection &&
             !showSystemSection &&
-            !showHistorySection &&
             !showVoiceRedirectSection &&
+            !showHistoryRedirectSection &&
             !showOnboardingCard
+    }
+}
+
+private struct HistoryStageView: View {
+    @ObservedObject var controller: FloController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            CardContainer {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Session History")
+                            .font(.system(size: 24, weight: .semibold))
+                            .foregroundStyle(FloTheme.textPrimary)
+                        Text("Review recent dictation/read-aloud events, latency, and request identifiers.")
+                            .foregroundStyle(FloTheme.textSecondary)
+                    }
+
+                    Spacer()
+
+                    Button("Clear History") {
+                        controller.clearHistory()
+                    }
+                    .buttonStyle(SecondaryActionButtonStyle())
+                    .accessibilityLabel("Clear History")
+                }
+            }
+
+            if let statusMessage = controller.statusMessage {
+                InlineNotice(text: statusMessage, tone: .info)
+            }
+
+            CardContainer {
+                HistorySection(entries: Array(controller.historyEntries.prefix(120)))
+            }
+        }
     }
 }
 
@@ -1534,11 +1592,6 @@ private struct UtilityActionsSection: View {
             HStack(spacing: 8) {
                 Button("Refresh Permissions") {
                     controller.refreshPermissions()
-                }
-                .buttonStyle(SecondaryActionButtonStyle())
-
-                Button("Clear History") {
-                    controller.clearHistory()
                 }
                 .buttonStyle(SecondaryActionButtonStyle())
 
