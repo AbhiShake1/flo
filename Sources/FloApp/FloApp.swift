@@ -2034,6 +2034,7 @@ private struct ProviderConfigurationSection: View {
 
     @State private var providerSearchQuery = ""
     @State private var isProviderCommandPresented = false
+    @State private var isFailoverPolicyPresented = false
     @State private var workingProviderOrder: [AIProvider] = []
     @State private var expandedProviders = Set<AIProvider>()
     @State private var credentialDrafts: [AIProvider: String] = [:]
@@ -2055,7 +2056,6 @@ private struct ProviderConfigurationSection: View {
             if showHeader { workbenchHeader }
             providerStackToolbar
             providerCardsSection
-            if includeRoutingPolicyControls { routingPolicySection }
         }
         .onAppear {
             syncWorkingOrder(with: activeProviders)
@@ -2107,6 +2107,28 @@ private struct ProviderConfigurationSection: View {
             .buttonStyle(SecondaryActionButtonStyle())
             .popover(isPresented: $isProviderCommandPresented, arrowEdge: .top) {
                 providerCommandPalette
+            }
+
+            if includeRoutingPolicyControls {
+                Button {
+                    isFailoverPolicyPresented = true
+                } label: {
+                    Image(systemName: "arrow.left.arrow.right.circle.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [FloTheme.accent, FloTheme.accentSoft],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+                .buttonStyle(SecondaryActionButtonStyle())
+                .accessibilityLabel("Configure failover policy")
+                .help("Configure failover policy")
+                .popover(isPresented: $isFailoverPolicyPresented, arrowEdge: .top) {
+                    failoverPolicyPopover
+                }
             }
         }
     }
@@ -2289,39 +2311,46 @@ private struct ProviderConfigurationSection: View {
         }
     }
 
-    private var routingPolicySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Divider()
+    private var failoverPolicyPopover: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "arrow.left.arrow.right.circle.fill")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [FloTheme.accent, FloTheme.accentSoft],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
 
-            Text("Failover Policy")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.white)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Failover Policy")
+                        .font(.headline)
+                    Text("Configure retry and fallback behavior for your active provider stack.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Divider()
 
             Text("Flo rotates keys first, then providers in your stack order.")
                 .font(.caption)
-                .foregroundStyle(Color.white.opacity(0.68))
+                .foregroundStyle(.secondary)
 
-            Toggle(isOn: crossProviderBinding) {
-                Text("Allow cross-provider fallback")
-                    .foregroundStyle(.white)
-            }
-            .toggleStyle(.switch)
+            Toggle("Allow cross-provider fallback", isOn: crossProviderBinding)
 
-            Stepper(value: maxAttemptsBinding, in: 1...20) {
-                Text("Max attempts: \(controller.failoverMaxAttempts)")
-                    .foregroundStyle(.white)
-            }
-
-            Stepper(value: failureThresholdBinding, in: 1...10) {
-                Text("Failure threshold before cooldown: \(controller.failoverFailureThreshold)")
-                    .foregroundStyle(.white)
-            }
-
-            Stepper(value: cooldownSecondsBinding, in: 0...900, step: 5) {
-                Text("Cooldown: \(controller.failoverCooldownSeconds)s")
-                    .foregroundStyle(.white)
-            }
+            Stepper("Max attempts: \(controller.failoverMaxAttempts)", value: maxAttemptsBinding, in: 1...20)
+            Stepper(
+                "Failure threshold before cooldown: \(controller.failoverFailureThreshold)",
+                value: failureThresholdBinding,
+                in: 1...10
+            )
+            Stepper("Cooldown: \(controller.failoverCooldownSeconds)s", value: cooldownSecondsBinding, in: 0...900, step: 5)
         }
+        .padding(16)
+        .frame(width: 360)
     }
 
     private var crossProviderBinding: Binding<Bool> {
