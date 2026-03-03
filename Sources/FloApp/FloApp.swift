@@ -132,6 +132,11 @@ private enum FloTheme {
     static let textSecondary = Color.white.opacity(0.66)
     static let sidebarFill = Color.black.opacity(0.24)
     static let workspaceFill = Color.black.opacity(0.16)
+    static let sidebarSoftStroke = Color.white.opacity(0.08)
+    static let sidebarRow = Color.white.opacity(0.03)
+    static let sidebarRowHover = Color.white.opacity(0.08)
+    static let sidebarRowActiveStart = Color.white.opacity(0.17)
+    static let sidebarRowActiveEnd = Color.white.opacity(0.08)
 }
 
 private struct RootView: View {
@@ -177,10 +182,10 @@ private struct RootView: View {
                 ) { stage in
                     selectedStage = stage
                 }
-                .frame(width: 248)
-                .padding(.leading, 18)
-                .padding(.trailing, 14)
-                .padding(.vertical, 20)
+                .frame(width: 304)
+                .padding(.leading, 0)
+                .padding(.trailing, 0)
+                .padding(.vertical, 0)
 
                 Rectangle()
                     .fill(Color.white.opacity(0.14))
@@ -292,13 +297,25 @@ private struct SidebarSurface: View {
     let activeStage: AppFlowStage
     let availableStages: Set<AppFlowStage>
     let onSelectStage: (AppFlowStage) -> Void
+    @State private var hoveredStage: AppFlowStage?
+
+    private var completionRatio: Double {
+        guard !AppFlowStage.allCases.isEmpty else {
+            return 0
+        }
+        return Double(availableStages.count) / Double(AppFlowStage.allCases.count)
+    }
+
+    private var unlockedSummary: String {
+        "\(availableStages.count) of \(AppFlowStage.allCases.count) sections available"
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center, spacing: 10) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(
                                 LinearGradient(
                                     colors: [FloTheme.accent, FloTheme.accentSoft],
@@ -306,66 +323,115 @@ private struct SidebarSurface: View {
                                     endPoint: .bottomTrailing
                                 )
                             )
-                            .frame(width: 28, height: 28)
+                            .frame(width: 30, height: 30)
                         Image(systemName: "waveform.and.mic")
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Color.white.opacity(0.95))
                     }
 
-                    Text("flo")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(FloTheme.textPrimary)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("flo")
+                            .font(.system(size: 21, weight: .semibold))
+                            .foregroundStyle(FloTheme.textPrimary)
+                        Text("Voice workspace")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(FloTheme.textSecondary)
+                    }
                 }
-
-                Text("Voice workspace")
-                    .font(.caption)
-                    .foregroundStyle(FloTheme.textSecondary)
             }
+            .padding(.horizontal, 2)
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Navigation")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(FloTheme.textSecondary)
+                    .textCase(.uppercase)
+                    .padding(.horizontal, 10)
+
                 ForEach(AppFlowStage.allCases, id: \.self) { stage in
                     let enabled = availableStages.contains(stage)
                     Button {
                         onSelectStage(stage)
                     } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: stage.icon)
-                                .font(.system(size: 13, weight: .semibold))
-                                .frame(width: 16)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(stage.title)
-                                    .font(.system(size: 13, weight: .semibold))
-                                Text(stage.subtitle)
-                                    .font(.system(size: 11, weight: .medium))
-                            }
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
+                        SidebarStageRow(
+                            stage: stage,
+                            isActive: stage == activeStage,
+                            isEnabled: enabled
+                        )
                     }
-                    .buttonStyle(SidebarStageButtonStyle(isActive: stage == activeStage, isEnabled: enabled))
+                    .buttonStyle(
+                        SidebarStageButtonStyle(
+                            isActive: stage == activeStage,
+                            isEnabled: enabled,
+                            isHovered: hoveredStage == stage
+                        )
+                    )
+                    .onHover { isHovering in
+                        hoveredStage = isHovering ? stage : nil
+                    }
                     .disabled(!enabled)
+                    .accessibilityLabel(stage.title)
+                    .accessibilityHint(enabled ? stage.subtitle : "Locked until \(currentStage.title) is complete")
                 }
             }
 
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Status")
-                    .font(.caption.weight(.semibold))
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Workflow")
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(FloTheme.textSecondary)
+                    .textCase(.uppercase)
 
-                StatusChip(text: controller.recorderState.label, color: recorderStateColor(controller.recorderState))
-                StatusChip(
-                    text: controller.isAuthenticated ? "Connected" : "Sign in required",
-                    color: controller.isAuthenticated ? FloTheme.success : FloTheme.warning
-                )
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(recorderStateColor(controller.recorderState))
+                            .frame(width: 8, height: 8)
+                        Text(controller.recorderState.label)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(FloTheme.textPrimary)
+                        Spacer(minLength: 0)
+                        Text(controller.isAuthenticated ? "Connected" : "Sign in")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(controller.isAuthenticated ? FloTheme.success : FloTheme.warning)
+                    }
 
-                Text("Required next: \(currentStage.title)")
-                    .font(.caption2)
-                    .foregroundStyle(FloTheme.textSecondary)
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            Capsule(style: .continuous)
+                                .fill(Color.white.opacity(0.08))
+                            Capsule(style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [FloTheme.accentSoft.opacity(0.95), FloTheme.accent.opacity(0.85)],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(width: max(geometry.size.width * completionRatio, 12))
+                        }
+                    }
+                    .frame(height: 7)
+
+                    Text(unlockedSummary)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(FloTheme.textSecondary)
+
+                    Text("Required next: \(currentStage.title)")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(FloTheme.textSecondary)
+                }
             }
-            .padding(10)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.clear)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.white.opacity(0.03))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(FloTheme.sidebarSoftStroke, lineWidth: 1)
+            )
 
             Spacer(minLength: 0)
 
@@ -376,10 +442,51 @@ private struct SidebarSurface: View {
                     }
                 }
                 .buttonStyle(SecondaryActionButtonStyle())
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(14)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+}
+
+private struct SidebarStageRow: View {
+    let stage: AppFlowStage
+    let isActive: Bool
+    let isEnabled: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(
+                        isActive
+                            ? FloTheme.accent.opacity(0.30)
+                            : Color.white.opacity(isEnabled ? 0.07 : 0.03)
+                    )
+                    .frame(width: 28, height: 28)
+                Image(systemName: stage.icon)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(isActive ? FloTheme.accentSoft : FloTheme.textSecondary)
+            }
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(stage.title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(FloTheme.textPrimary)
+                Text(stage.subtitle)
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+                    .foregroundStyle(FloTheme.textSecondary)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 }
 
@@ -478,19 +585,63 @@ private struct ToolbarSearchField: View {
 private struct SidebarStageButtonStyle: ButtonStyle {
     let isActive: Bool
     let isEnabled: Bool
+    let isHovered: Bool
+    @Environment(\.isEnabled) private var environmentEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .foregroundStyle(isActive ? FloTheme.textPrimary : FloTheme.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isActive ? FloTheme.accent.opacity(configuration.isPressed ? 0.30 : 0.22) : Color.clear)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(backgroundFill(isPressed: configuration.isPressed))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(isActive ? FloTheme.accent.opacity(0.40) : Color.white.opacity(0.08), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(strokeColor, lineWidth: 1)
             )
-            .opacity(isEnabled ? 1 : 0.45)
+            .shadow(
+                color: isActive ? FloTheme.accent.opacity(0.22) : Color.clear,
+                radius: isActive ? 12 : 0,
+                x: 0,
+                y: isActive ? 8 : 0
+            )
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .opacity((isEnabled && environmentEnabled) ? 1 : 0.52)
+            .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.16), value: isHovered)
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func backgroundFill(isPressed: Bool) -> AnyShapeStyle {
+        if isActive {
+            return AnyShapeStyle(
+                LinearGradient(
+                    colors: [
+                        FloTheme.sidebarRowActiveStart.opacity(isPressed ? 0.90 : 1),
+                        FloTheme.sidebarRowActiveEnd.opacity(isPressed ? 0.90 : 1)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+        }
+        if isPressed {
+            return AnyShapeStyle(FloTheme.sidebarRowHover.opacity(0.86))
+        }
+        if isHovered {
+            return AnyShapeStyle(FloTheme.sidebarRowHover)
+        }
+        return AnyShapeStyle(FloTheme.sidebarRow)
+    }
+
+    private var strokeColor: Color {
+        if isActive {
+            return FloTheme.accent.opacity(0.45)
+        }
+        if isHovered {
+            return Color.white.opacity(0.18)
+        }
+        return FloTheme.sidebarSoftStroke
     }
 }
 
