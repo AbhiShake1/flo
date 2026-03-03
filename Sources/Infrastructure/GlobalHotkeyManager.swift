@@ -112,22 +112,26 @@ public final class GlobalHotkeyManager: HotkeyManaging {
         }
 
         if let dictationBinding = bindings[.dictationHold],
-           dictationBinding.enabled,
-           matches(keyCode: keyCode, flags: flags, combo: dictationBinding.combo)
+           dictationBinding.enabled
         {
+            let isTriggerKey = keyCode == dictationBinding.combo.keyCode
+            let isComboMatch = matches(keyCode: keyCode, flags: flags, combo: dictationBinding.combo)
+
             switch phase {
-            case .down:
+            case .down where isComboMatch:
                 if !dictationPressed {
                     dictationPressed = true
                     handlers.dictationStarted()
                 }
-            case .up:
-                if dictationPressed {
-                    dictationPressed = false
-                    handlers.dictationStopped()
-                }
+                return true
+            case .up where dictationPressed && isTriggerKey:
+                // Modifier flags can change before key-up arrives when users release the combo quickly.
+                dictationPressed = false
+                handlers.dictationStopped()
+                return true
+            default:
+                break
             }
-            return true
         }
 
         if phase == .down,
