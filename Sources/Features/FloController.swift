@@ -166,7 +166,7 @@ public final class FloController: ObservableObject {
         guard let encodedProviderID = provider.rawValue.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
             return nil
         }
-        return URL(string: "https://models.dev/logos/\(encodedProviderID).png")
+        return URL(string: "https://models.dev/logos/\(encodedProviderID).svg")
     }
 
     public func providerModels(for provider: AIProvider, matching query: String = "") -> [ModelsDevModelEntry] {
@@ -203,6 +203,17 @@ public final class FloController: ObservableObject {
         providerRoutingOverrides.rewriteModelsByProvider?[provider.rawValue]
     }
 
+    public func rewriteModelOverride(for provider: AIProvider, credentialIndex: Int) -> String? {
+        guard credentialIndex >= 0 else {
+            return nil
+        }
+        return credentialRewriteModelOverrides(for: provider)[credentialIndex]
+    }
+
+    public func activeRewriteModel(for provider: AIProvider, credentialIndex: Int) -> String {
+        rewriteModelOverride(for: provider, credentialIndex: credentialIndex) ?? activeRewriteModel(for: provider)
+    }
+
     public func setRewriteModel(_ modelID: String, for provider: AIProvider) {
         let trimmedModelID = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedModelID.isEmpty else {
@@ -221,7 +232,8 @@ public final class FloController: ObservableObject {
                     failureThreshold: current.failureThreshold,
                     cooldownSeconds: current.cooldownSeconds,
                     allowedProviders: current.allowedProviders,
-                    rewriteModelsByProvider: overrides
+                    rewriteModelsByProvider: overrides,
+                    rewriteModelsByProviderCredentialIndex: current.rewriteModelsByProviderCredentialIndex
                 )
             },
             statusMessage: "\(providerDisplayName(for: provider)) rewrite model set to \(trimmedModelID)."
@@ -242,10 +254,75 @@ public final class FloController: ObservableObject {
                     failureThreshold: current.failureThreshold,
                     cooldownSeconds: current.cooldownSeconds,
                     allowedProviders: current.allowedProviders,
-                    rewriteModelsByProvider: normalized
+                    rewriteModelsByProvider: normalized,
+                    rewriteModelsByProviderCredentialIndex: current.rewriteModelsByProviderCredentialIndex
                 )
             },
             statusMessage: "\(providerDisplayName(for: provider)) rewrite model override cleared."
+        )
+    }
+
+    public func setRewriteModel(_ modelID: String, for provider: AIProvider, credentialIndex: Int) {
+        guard credentialIndex >= 0 else {
+            return
+        }
+
+        let trimmedModelID = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedModelID.isEmpty else {
+            return
+        }
+
+        persistRoutingOverrides(
+            updating: { current in
+                var providerMap = current.rewriteModelsByProviderCredentialIndex ?? [:]
+                var indexMap = providerMap[provider.rawValue] ?? [:]
+                indexMap[String(credentialIndex)] = trimmedModelID
+                providerMap[provider.rawValue] = indexMap
+
+                return ProviderRoutingOverrides(
+                    providerOrder: current.providerOrder,
+                    allowCrossProviderFallback: current.allowCrossProviderFallback,
+                    maxAttempts: current.maxAttempts,
+                    failureThreshold: current.failureThreshold,
+                    cooldownSeconds: current.cooldownSeconds,
+                    allowedProviders: current.allowedProviders,
+                    rewriteModelsByProvider: current.rewriteModelsByProvider,
+                    rewriteModelsByProviderCredentialIndex: providerMap
+                )
+            },
+            statusMessage: "\(providerDisplayName(for: provider)) key \(credentialIndex + 1) model set to \(trimmedModelID)."
+        )
+    }
+
+    public func clearRewriteModelOverride(for provider: AIProvider, credentialIndex: Int) {
+        guard credentialIndex >= 0 else {
+            return
+        }
+
+        persistRoutingOverrides(
+            updating: { current in
+                var providerMap = current.rewriteModelsByProviderCredentialIndex ?? [:]
+                var indexMap = providerMap[provider.rawValue] ?? [:]
+                indexMap.removeValue(forKey: String(credentialIndex))
+                if indexMap.isEmpty {
+                    providerMap.removeValue(forKey: provider.rawValue)
+                } else {
+                    providerMap[provider.rawValue] = indexMap
+                }
+                let normalized = providerMap.isEmpty ? nil : providerMap
+
+                return ProviderRoutingOverrides(
+                    providerOrder: current.providerOrder,
+                    allowCrossProviderFallback: current.allowCrossProviderFallback,
+                    maxAttempts: current.maxAttempts,
+                    failureThreshold: current.failureThreshold,
+                    cooldownSeconds: current.cooldownSeconds,
+                    allowedProviders: current.allowedProviders,
+                    rewriteModelsByProvider: current.rewriteModelsByProvider,
+                    rewriteModelsByProviderCredentialIndex: normalized
+                )
+            },
+            statusMessage: "\(providerDisplayName(for: provider)) key \(credentialIndex + 1) model override cleared."
         )
     }
 
@@ -276,6 +353,86 @@ public final class FloController: ObservableObject {
 
     public func configuredKeyCount(for provider: AIProvider) -> Int {
         mergedCredentialTokens(for: provider).count
+    }
+
+    public func providerCredentials(for provider: AIProvider) -> [String] {
+        savedCredentialTokens(for: provider)
+    }
+
+    @discardableResult
+    public func copyProviderCredential(at index: Int, for provider: AIProvider) -> Bool {
+        let credentials = savedCredentialTokens(for: provider)
+        guard credentials.indices.contains(index) else {
+            statusMessage = "Could not copy API key."
+            return false
+        }
+
+        let copied = copyToClipboard(credentials[index])
+        statusMessage = copied
+            ? "\(provider.displayName) API key copied to clipboard."
+            : "Could not copy API key."
+        return copied
+    }
+
+    public func addProviderCredential(_ credential: String, for provider: AIProvider) {
+        let additions = parseCredentialInput(credential)
+        guard !additions.isEmpty else {
+            statusMessage = "API key is empty."
+            return
+        }
+
+        let existing = savedCredentialTokens(for: provider)
+        let inheritedDefaultModel: String? = existing.isEmpty
+            ? nil
+            : activeRewriteModel(for: provider, credentialIndex: 0)
+        let merged = normalizeCredentialPool(existing + additions)
+        saveProviderCredentialPool(
+            merged,
+            for: provider,
+            successMessage: "\(provider.displayName) API key added. Saved keys: \(merged.count).",
+            defaultModelForNewCredentials: inheritedDefaultModel
+        )
+    }
+
+    public func updateProviderCredential(_ credential: String, at index: Int, for provider: AIProvider) {
+        let replacements = parseCredentialInput(credential)
+        guard let replacement = replacements.first else {
+            statusMessage = "API key is empty."
+            return
+        }
+
+        var existing = savedCredentialTokens(for: provider)
+        guard existing.indices.contains(index) else {
+            statusMessage = "Could not update API key."
+            return
+        }
+
+        existing[index] = replacement
+        saveProviderCredentialPool(
+            existing,
+            for: provider,
+            successMessage: "\(provider.displayName) API key updated."
+        )
+    }
+
+    public func removeProviderCredential(at index: Int, for provider: AIProvider) async {
+        var existing = savedCredentialTokens(for: provider)
+        guard existing.indices.contains(index) else {
+            statusMessage = "Could not remove API key."
+            return
+        }
+
+        existing.remove(at: index)
+        if existing.isEmpty {
+            await removeSavedProviderCredential(for: provider)
+            return
+        }
+
+        saveProviderCredentialPool(
+            existing,
+            for: provider,
+            successMessage: "\(provider.displayName) API key removed. Saved keys: \(existing.count)."
+        )
     }
 
     public func providerSupportsFailoverOperation(_ provider: AIProvider) -> Bool {
@@ -337,7 +494,8 @@ public final class FloController: ObservableObject {
                     failureThreshold: current.failureThreshold,
                     cooldownSeconds: current.cooldownSeconds,
                     allowedProviders: current.allowedProviders,
-                    rewriteModelsByProvider: current.rewriteModelsByProvider
+                    rewriteModelsByProvider: current.rewriteModelsByProvider,
+                    rewriteModelsByProviderCredentialIndex: current.rewriteModelsByProviderCredentialIndex
                 )
             },
             statusMessage: "Updated provider failover order."
@@ -369,7 +527,8 @@ public final class FloController: ObservableObject {
                     failureThreshold: current.failureThreshold,
                     cooldownSeconds: current.cooldownSeconds,
                     allowedProviders: Array(allowed).map(\.rawValue).sorted(),
-                    rewriteModelsByProvider: current.rewriteModelsByProvider
+                    rewriteModelsByProvider: current.rewriteModelsByProvider,
+                    rewriteModelsByProviderCredentialIndex: current.rewriteModelsByProviderCredentialIndex
                 )
             },
             statusMessage: "\(provider.displayName) removed from failover rotation."
@@ -401,7 +560,8 @@ public final class FloController: ObservableObject {
                     failureThreshold: current.failureThreshold,
                     cooldownSeconds: current.cooldownSeconds,
                     allowedProviders: Array(allowed).map(\.rawValue).sorted(),
-                    rewriteModelsByProvider: current.rewriteModelsByProvider
+                    rewriteModelsByProvider: current.rewriteModelsByProvider,
+                    rewriteModelsByProviderCredentialIndex: current.rewriteModelsByProviderCredentialIndex
                 )
             },
             statusMessage: enabled
@@ -420,7 +580,8 @@ public final class FloController: ObservableObject {
                     failureThreshold: current.failureThreshold,
                     cooldownSeconds: current.cooldownSeconds,
                     allowedProviders: current.allowedProviders,
-                    rewriteModelsByProvider: current.rewriteModelsByProvider
+                    rewriteModelsByProvider: current.rewriteModelsByProvider,
+                    rewriteModelsByProviderCredentialIndex: current.rewriteModelsByProviderCredentialIndex
                 )
             },
             statusMessage: enabled
@@ -440,7 +601,8 @@ public final class FloController: ObservableObject {
                     failureThreshold: current.failureThreshold,
                     cooldownSeconds: current.cooldownSeconds,
                     allowedProviders: current.allowedProviders,
-                    rewriteModelsByProvider: current.rewriteModelsByProvider
+                    rewriteModelsByProvider: current.rewriteModelsByProvider,
+                    rewriteModelsByProviderCredentialIndex: current.rewriteModelsByProviderCredentialIndex
                 )
             },
             statusMessage: "Failover max attempts set to \(clamped)."
@@ -458,7 +620,8 @@ public final class FloController: ObservableObject {
                     failureThreshold: clamped,
                     cooldownSeconds: current.cooldownSeconds,
                     allowedProviders: current.allowedProviders,
-                    rewriteModelsByProvider: current.rewriteModelsByProvider
+                    rewriteModelsByProvider: current.rewriteModelsByProvider,
+                    rewriteModelsByProviderCredentialIndex: current.rewriteModelsByProviderCredentialIndex
                 )
             },
             statusMessage: "Provider failure threshold set to \(clamped)."
@@ -476,7 +639,8 @@ public final class FloController: ObservableObject {
                     failureThreshold: current.failureThreshold,
                     cooldownSeconds: clamped,
                     allowedProviders: current.allowedProviders,
-                    rewriteModelsByProvider: current.rewriteModelsByProvider
+                    rewriteModelsByProvider: current.rewriteModelsByProvider,
+                    rewriteModelsByProviderCredentialIndex: current.rewriteModelsByProviderCredentialIndex
                 )
             },
             statusMessage: "Provider cooldown set to \(clamped)s."
@@ -508,7 +672,8 @@ public final class FloController: ObservableObject {
                     failureThreshold: current.failureThreshold,
                     cooldownSeconds: current.cooldownSeconds,
                     allowedProviders: current.allowedProviders,
-                    rewriteModelsByProvider: current.rewriteModelsByProvider
+                    rewriteModelsByProvider: current.rewriteModelsByProvider,
+                    rewriteModelsByProviderCredentialIndex: current.rewriteModelsByProviderCredentialIndex
                 )
             },
             statusMessage: "Moved \(provider.displayName) in failover order."
@@ -533,7 +698,8 @@ public final class FloController: ObservableObject {
                     failureThreshold: current.failureThreshold,
                     cooldownSeconds: current.cooldownSeconds,
                     allowedProviders: Array(allowed).map(\.rawValue).sorted(),
-                    rewriteModelsByProvider: current.rewriteModelsByProvider
+                    rewriteModelsByProvider: current.rewriteModelsByProvider,
+                    rewriteModelsByProviderCredentialIndex: current.rewriteModelsByProviderCredentialIndex
                 )
             },
             statusMessage: nil
@@ -600,6 +766,36 @@ public final class FloController: ObservableObject {
             }
             return normalized.isEmpty ? nil : normalized
         }()
+        let normalizedRewriteModelsByProviderCredentialIndex: [String: [String: String]]? = {
+            guard let raw = overrides.rewriteModelsByProviderCredentialIndex else {
+                return nil
+            }
+
+            var normalizedByProvider: [String: [String: String]] = [:]
+            for (providerID, indexMap) in raw {
+                guard let provider = AIProvider(rawValue: providerID) else {
+                    continue
+                }
+
+                var normalizedByIndex: [String: String] = [:]
+                for (indexKey, modelID) in indexMap {
+                    guard
+                        let index = Int(indexKey),
+                        index >= 0,
+                        !modelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    else {
+                        continue
+                    }
+                    normalizedByIndex[String(index)] = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+
+                if !normalizedByIndex.isEmpty {
+                    normalizedByProvider[provider.rawValue] = normalizedByIndex
+                }
+            }
+
+            return normalizedByProvider.isEmpty ? nil : normalizedByProvider
+        }()
 
         let maxAttempts = overrides.maxAttempts.map { max(1, min(Self.maxFailoverAttempts, $0)) }
         let failureThreshold = overrides.failureThreshold.map { max(1, min(Self.maxFailoverFailureThreshold, $0)) }
@@ -612,7 +808,8 @@ public final class FloController: ObservableObject {
             failureThreshold: failureThreshold,
             cooldownSeconds: cooldownSeconds,
             allowedProviders: normalizedAllowedProviders,
-            rewriteModelsByProvider: normalizedRewriteModelsByProvider
+            rewriteModelsByProvider: normalizedRewriteModelsByProvider,
+            rewriteModelsByProviderCredentialIndex: normalizedRewriteModelsByProviderCredentialIndex
         )
     }
 
@@ -642,6 +839,112 @@ public final class FloController: ObservableObject {
 
     private var savedCredentialToken: String? {
         savedCredentialTokens.first
+    }
+
+    private func credentialRewriteModelOverrides(for provider: AIProvider) -> [Int: String] {
+        guard let raw = providerRoutingOverrides.rewriteModelsByProviderCredentialIndex?[provider.rawValue] else {
+            return [:]
+        }
+
+        var normalized: [Int: String] = [:]
+        for (indexKey, modelID) in raw {
+            guard
+                let index = Int(indexKey),
+                index >= 0,
+                !modelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else {
+                continue
+            }
+            normalized[index] = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return normalized
+    }
+
+    private func clearCredentialModelOverrides(for provider: AIProvider) {
+        persistRoutingOverrides(
+            updating: { current in
+                var providerMap = current.rewriteModelsByProviderCredentialIndex ?? [:]
+                providerMap.removeValue(forKey: provider.rawValue)
+                let normalized = providerMap.isEmpty ? nil : providerMap
+
+                return ProviderRoutingOverrides(
+                    providerOrder: current.providerOrder,
+                    allowCrossProviderFallback: current.allowCrossProviderFallback,
+                    maxAttempts: current.maxAttempts,
+                    failureThreshold: current.failureThreshold,
+                    cooldownSeconds: current.cooldownSeconds,
+                    allowedProviders: current.allowedProviders,
+                    rewriteModelsByProvider: current.rewriteModelsByProvider,
+                    rewriteModelsByProviderCredentialIndex: normalized
+                )
+            },
+            statusMessage: nil
+        )
+    }
+
+    private func syncCredentialModelOverridesAfterCredentialSave(
+        for provider: AIProvider,
+        previousCredentials: [String],
+        newCredentials: [String],
+        previousModelOverrides: [Int: String],
+        defaultModelForNewCredentials: String?
+    ) {
+        var consumedPreviousIndices = Set<Int>()
+        var nextByIndex: [String: String] = [:]
+        let trimmedDefaultModel = defaultModelForNewCredentials?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        for (newIndex, token) in newCredentials.enumerated() {
+            var matchedPreviousIndex: Int?
+            if previousCredentials.indices.contains(newIndex), previousCredentials[newIndex] == token {
+                matchedPreviousIndex = newIndex
+            } else if let firstMatching = previousCredentials.enumerated().first(
+                where: { !consumedPreviousIndices.contains($0.offset) && $0.element == token }
+            ) {
+                matchedPreviousIndex = firstMatching.offset
+            }
+
+            if let matchedPreviousIndex {
+                consumedPreviousIndices.insert(matchedPreviousIndex)
+                if let existingModel = previousModelOverrides[matchedPreviousIndex] {
+                    nextByIndex[String(newIndex)] = existingModel
+                }
+                continue
+            }
+
+            if let trimmedDefaultModel, !trimmedDefaultModel.isEmpty {
+                nextByIndex[String(newIndex)] = trimmedDefaultModel
+            }
+        }
+
+        let currentRawByProvider = providerRoutingOverrides.rewriteModelsByProviderCredentialIndex ?? [:]
+        let currentRawForProvider = currentRawByProvider[provider.rawValue] ?? [:]
+        if currentRawForProvider == nextByIndex {
+            return
+        }
+
+        persistRoutingOverrides(
+            updating: { current in
+                var providerMap = current.rewriteModelsByProviderCredentialIndex ?? [:]
+                if nextByIndex.isEmpty {
+                    providerMap.removeValue(forKey: provider.rawValue)
+                } else {
+                    providerMap[provider.rawValue] = nextByIndex
+                }
+                let normalized = providerMap.isEmpty ? nil : providerMap
+
+                return ProviderRoutingOverrides(
+                    providerOrder: current.providerOrder,
+                    allowCrossProviderFallback: current.allowCrossProviderFallback,
+                    maxAttempts: current.maxAttempts,
+                    failureThreshold: current.failureThreshold,
+                    cooldownSeconds: current.cooldownSeconds,
+                    allowedProviders: current.allowedProviders,
+                    rewriteModelsByProvider: current.rewriteModelsByProvider,
+                    rewriteModelsByProviderCredentialIndex: normalized
+                )
+            },
+            statusMessage: nil
+        )
     }
 
     private func mergedCredentialTokens(for provider: AIProvider) -> [String] {
@@ -701,8 +1004,20 @@ public final class FloController: ObservableObject {
     }
 
     private func modelsDevProviderEntry(for provider: AIProvider) -> ModelsDevProviderEntry? {
-        modelsDevCatalogSnapshot.providerByID[provider.rawValue]
+        let providerByID = modelsDevCatalogSnapshot.providerByID
+        if let direct = providerByID[provider.rawValue] {
+            return direct
+        }
+        if let alias = Self.modelsDevProviderAliasByProviderID[provider.rawValue] {
+            return providerByID[alias]
+        }
+        return nil
     }
+
+    private static let modelsDevProviderAliasByProviderID: [String: String] = [
+        "gemini": "google",
+        "together": "togetherai"
+    ]
 
     public init(
         environment: AppEnvironment,
@@ -860,6 +1175,23 @@ public final class FloController: ObservableObject {
             return
         }
 
+        saveProviderCredentialPool(normalizedCredentials, for: provider)
+    }
+
+    private func saveProviderCredentialPool(
+        _ credentials: [String],
+        for provider: AIProvider,
+        successMessage: String? = nil,
+        defaultModelForNewCredentials: String? = nil
+    ) {
+        let previousCredentials = savedCredentialTokens(for: provider)
+        let previousModelOverrides = credentialRewriteModelOverrides(for: provider)
+        let normalizedCredentials = normalizeCredentialPool(credentials)
+        guard !normalizedCredentials.isEmpty else {
+            statusMessage = "API key is empty."
+            return
+        }
+
         do {
             try environment.providerCredentialStore.saveCredentials(normalizedCredentials, for: provider.rawValue)
             includeProviderInFailoverRotation(provider)
@@ -873,11 +1205,14 @@ public final class FloController: ObservableObject {
             )
             authState = .loggedIn(session)
             oauthBlockerMessage = nil
-            if normalizedCredentials.count == 1 {
-                statusMessage = "\(provider.displayName) API key saved in keychain."
-            } else {
-                statusMessage = "\(provider.displayName) API keys saved in keychain (\(normalizedCredentials.count))."
-            }
+            statusMessage = successMessage ?? defaultSavedCredentialsStatusMessage(for: provider, keyCount: normalizedCredentials.count)
+            syncCredentialModelOverridesAfterCredentialSave(
+                for: provider,
+                previousCredentials: previousCredentials,
+                newCredentials: normalizedCredentials,
+                previousModelOverrides: previousModelOverrides,
+                defaultModelForNewCredentials: defaultModelForNewCredentials
+            )
             setRecorderState(.idle)
             configureHotkeysIfAllowed()
             environment.logger.info("Saved \(normalizedCredentials.count) \(provider.displayName) API key(s) to keychain.")
@@ -895,6 +1230,7 @@ public final class FloController: ObservableObject {
     public func removeSavedProviderCredential(for provider: AIProvider) async {
         do {
             try environment.providerCredentialStore.clearCredential(for: provider.rawValue)
+            clearCredentialModelOverrides(for: provider)
             usesSavedProviderCredential = hasAnySavedProviderCredential
             environment.logger.info("Removed saved \(provider.displayName) API key.")
             await bootstrap()
@@ -1911,14 +2247,29 @@ public final class FloController: ObservableObject {
         let values = raw
             .split { $0 == "," || $0 == ";" || $0 == "\n" || $0 == "\t" }
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+        return normalizeCredentialPool(values)
+    }
 
+    private func normalizeCredentialPool(_ credentials: [String]) -> [String] {
         var seen = Set<String>()
         var result: [String] = []
-        for value in values where seen.insert(value).inserted {
-            result.append(value)
+        for raw in credentials {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                continue
+            }
+            if seen.insert(trimmed).inserted {
+                result.append(trimmed)
+            }
         }
         return result
+    }
+
+    private func defaultSavedCredentialsStatusMessage(for provider: AIProvider, keyCount: Int) -> String {
+        if keyCount == 1 {
+            return "\(provider.displayName) API key saved in keychain."
+        }
+        return "\(provider.displayName) API keys saved in keychain (\(keyCount))."
     }
 
     private func localizedMessage(for error: Error) -> String {

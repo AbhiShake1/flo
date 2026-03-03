@@ -1965,8 +1965,15 @@ private struct ProviderConfigurationSection: View {
     @State private var isFailoverPolicyPresented = false
     @State private var workingProviderOrder: [AIProvider] = []
     @State private var expandedProviders = Set<AIProvider>()
-    @State private var credentialDrafts: [AIProvider: String] = [:]
-    @State private var modelSearchQueries: [AIProvider: String] = [:]
+    @State private var addCredentialDrafts: [AIProvider: String] = [:]
+    @State private var isAddingCredentialByProvider = Set<AIProvider>()
+    @State private var visibleCredentialIndicesByProvider: [AIProvider: Set<Int>] = [:]
+    @State private var copiedCredentialIndicesByProvider: [AIProvider: Set<Int>] = [:]
+    @State private var editingCredentialIndexByProvider: [AIProvider: Int] = [:]
+    @State private var editingCredentialDraftByProvider: [AIProvider: String] = [:]
+    @State private var pendingCredentialRemovalIndexByProvider: [AIProvider: Int] = [:]
+    @State private var modelSearchQueriesByCredential: [AIProvider: [Int: String]] = [:]
+    @State private var presentedModelPopoverByProvider: [AIProvider: Int] = [:]
     @State private var draggedProvider: AIProvider?
     @State private var pendingRemovalProvider: AIProvider?
 
@@ -1997,6 +2004,7 @@ private struct ProviderConfigurationSection: View {
             if let pendingRemovalProvider, !activeProviders.contains(pendingRemovalProvider) {
                 self.pendingRemovalProvider = nil
             }
+            syncCredentialInteractionState(with: activeProviders)
         }
     }
 
@@ -2412,6 +2420,162 @@ private struct ProviderConfigurationSection: View {
         }
     }
 
+    private func syncCredentialInteractionState(with providers: [AIProvider]) {
+        let activeSet = Set(providers)
+        addCredentialDrafts = addCredentialDrafts.filter { activeSet.contains($0.key) }
+        isAddingCredentialByProvider = Set(isAddingCredentialByProvider.filter { activeSet.contains($0) })
+        visibleCredentialIndicesByProvider = visibleCredentialIndicesByProvider.filter { activeSet.contains($0.key) }
+        copiedCredentialIndicesByProvider = copiedCredentialIndicesByProvider.filter { activeSet.contains($0.key) }
+        editingCredentialIndexByProvider = editingCredentialIndexByProvider.filter { activeSet.contains($0.key) }
+        editingCredentialDraftByProvider = editingCredentialDraftByProvider.filter { activeSet.contains($0.key) }
+        pendingCredentialRemovalIndexByProvider = pendingCredentialRemovalIndexByProvider.filter { activeSet.contains($0.key) }
+        modelSearchQueriesByCredential = modelSearchQueriesByCredential.filter { activeSet.contains($0.key) }
+        presentedModelPopoverByProvider = presentedModelPopoverByProvider.filter { activeSet.contains($0.key) }
+    }
+
+    private func clearCredentialInteractionState(for provider: AIProvider) {
+        addCredentialDrafts.removeValue(forKey: provider)
+        isAddingCredentialByProvider.remove(provider)
+        visibleCredentialIndicesByProvider.removeValue(forKey: provider)
+        copiedCredentialIndicesByProvider.removeValue(forKey: provider)
+        editingCredentialIndexByProvider.removeValue(forKey: provider)
+        editingCredentialDraftByProvider.removeValue(forKey: provider)
+        pendingCredentialRemovalIndexByProvider.removeValue(forKey: provider)
+        modelSearchQueriesByCredential.removeValue(forKey: provider)
+        presentedModelPopoverByProvider.removeValue(forKey: provider)
+    }
+
+    private func isCredentialVisible(_ index: Int, for provider: AIProvider) -> Bool {
+        visibleCredentialIndicesByProvider[provider]?.contains(index) == true
+    }
+
+    private func toggleCredentialVisibility(_ index: Int, for provider: AIProvider) {
+        var visible = visibleCredentialIndicesByProvider[provider] ?? Set<Int>()
+        if visible.contains(index) {
+            visible.remove(index)
+        } else {
+            visible.insert(index)
+        }
+        visibleCredentialIndicesByProvider[provider] = visible
+    }
+
+    private func maskedCredential(_ credential: String) -> String {
+        let suffix = String(credential.suffix(4))
+        return suffix.isEmpty ? "••••••••" : "••••••••\(suffix)"
+    }
+
+    private func beginEditingCredential(_ credential: String, at index: Int, for provider: AIProvider) {
+        editingCredentialIndexByProvider[provider] = index
+        editingCredentialDraftByProvider[provider] = credential
+        pendingCredentialRemovalIndexByProvider.removeValue(forKey: provider)
+    }
+
+    private func cancelEditingCredential(for provider: AIProvider) {
+        editingCredentialIndexByProvider.removeValue(forKey: provider)
+        editingCredentialDraftByProvider.removeValue(forKey: provider)
+    }
+
+    private func saveEditedCredential(at index: Int, for provider: AIProvider) {
+        let draft = editingCredentialDraftByProvider[provider] ?? ""
+        guard !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+
+        controller.updateProviderCredential(draft, at: index, for: provider)
+        cancelEditingCredential(for: provider)
+        pendingCredentialRemovalIndexByProvider.removeValue(forKey: provider)
+    }
+
+    private func toggleAddCredential(for provider: AIProvider) {
+        if isAddingCredentialByProvider.contains(provider) {
+            isAddingCredentialByProvider.remove(provider)
+            addCredentialDrafts.removeValue(forKey: provider)
+        } else {
+            isAddingCredentialByProvider.insert(provider)
+        }
+    }
+
+    private func addCredential(for provider: AIProvider) {
+        let draft = addCredentialDrafts[provider] ?? ""
+        guard !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+
+        controller.addProviderCredential(draft, for: provider)
+        addCredentialDrafts[provider] = ""
+        isAddingCredentialByProvider.remove(provider)
+        pendingCredentialRemovalIndexByProvider.removeValue(forKey: provider)
+    }
+
+    private func handleCredentialRemovalTap(at index: Int, for provider: AIProvider) {
+        if pendingCredentialRemovalIndexByProvider[provider] == index {
+            pendingCredentialRemovalIndexByProvider.removeValue(forKey: provider)
+            cancelEditingCredential(for: provider)
+            visibleCredentialIndicesByProvider[provider] = []
+            copiedCredentialIndicesByProvider[provider] = []
+            modelSearchQueriesByCredential[provider] = [:]
+            presentedModelPopoverByProvider.removeValue(forKey: provider)
+            Task {
+                await controller.removeProviderCredential(at: index, for: provider)
+            }
+            return
+        }
+
+        pendingCredentialRemovalIndexByProvider[provider] = index
+    }
+
+    private func isCredentialRecentlyCopied(_ index: Int, for provider: AIProvider) -> Bool {
+        copiedCredentialIndicesByProvider[provider]?.contains(index) == true
+    }
+
+    private func copyCredentialAndShowFeedback(at index: Int, for provider: AIProvider) {
+        let copied = controller.copyProviderCredential(at: index, for: provider)
+        guard copied else {
+            return
+        }
+
+        var copiedSet = copiedCredentialIndicesByProvider[provider] ?? Set<Int>()
+        copiedSet.insert(index)
+        copiedCredentialIndicesByProvider[provider] = copiedSet
+
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            await MainActor.run {
+                var updated = copiedCredentialIndicesByProvider[provider] ?? Set<Int>()
+                updated.remove(index)
+                if updated.isEmpty {
+                    copiedCredentialIndicesByProvider.removeValue(forKey: provider)
+                } else {
+                    copiedCredentialIndicesByProvider[provider] = updated
+                }
+            }
+        }
+    }
+
+    private func modelPopoverBinding(for provider: AIProvider, credentialIndex: Int) -> Binding<Bool> {
+        Binding(
+            get: { presentedModelPopoverByProvider[provider] == credentialIndex },
+            set: { isPresented in
+                if isPresented {
+                    presentedModelPopoverByProvider[provider] = credentialIndex
+                } else if presentedModelPopoverByProvider[provider] == credentialIndex {
+                    presentedModelPopoverByProvider.removeValue(forKey: provider)
+                }
+            }
+        )
+    }
+
+    private func credentialModelSearchBinding(for provider: AIProvider, credentialIndex: Int) -> Binding<String> {
+        Binding(
+            get: { modelSearchQueriesByCredential[provider]?[credentialIndex] ?? "" },
+            set: { nextValue in
+                var providerMap = modelSearchQueriesByCredential[provider] ?? [:]
+                providerMap[credentialIndex] = nextValue
+                modelSearchQueriesByCredential[provider] = providerMap
+            }
+        )
+    }
+
     private func addProvider(_ provider: AIProvider) {
         controller.addProviderToFailoverOrder(provider)
         if !workingProviderOrder.contains(provider) {
@@ -2428,7 +2592,7 @@ private struct ProviderConfigurationSection: View {
         controller.removeProviderFromFailoverOrder(provider)
         workingProviderOrder.removeAll { $0 == provider }
         expandedProviders.remove(provider)
-        credentialDrafts.removeValue(forKey: provider)
+        clearCredentialInteractionState(for: provider)
         pendingRemovalProvider = nil
     }
 
@@ -2453,16 +2617,20 @@ private struct ProviderConfigurationSection: View {
 
     private func providerCard(_ provider: AIProvider) -> some View {
         let displayName = controller.providerDisplayName(for: provider)
-        let keyCount = controller.configuredKeyCount(for: provider)
+        let credentials = controller.providerCredentials(for: provider)
+        let keyCount = credentials.count
         let isExpanded = expandedProviders.contains(provider)
         let isPendingRemoval = pendingRemovalProvider == provider
+        let addingCredential = isAddingCredentialByProvider.contains(provider)
+        let editingIndex = editingCredentialIndexByProvider[provider]
+        let pendingCredentialRemovalIndex = pendingCredentialRemovalIndexByProvider[provider]
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 8) {
                 providerLogoBadge(
                     for: provider,
                     size: 24,
-                    fallbackSystemImage: "line.3.horizontal"
+                    fallbackSystemImage: "circle.grid.2x2.fill"
                 )
                     .accessibilityHidden(true)
 
@@ -2524,42 +2692,30 @@ private struct ProviderConfigurationSection: View {
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 8) {
-                    SecureField("Paste \(displayName) API key(s)", text: credentialDraftBinding(for: provider))
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel("\(displayName) API keys")
+                    providerCredentialsSection(
+                        provider: provider,
+                        displayName: displayName,
+                        credentials: credentials,
+                        editingIndex: editingIndex,
+                        pendingCredentialRemovalIndex: pendingCredentialRemovalIndex
+                    )
 
-                    Text("Save one key or comma-separated key list. New save replaces this provider's saved pool.")
-                        .font(.caption2)
-                        .foregroundStyle(Color.white.opacity(0.58))
-
-                    HStack(spacing: 8) {
-                        Button("Save Keys") {
-                            let draft = credentialDrafts[provider] ?? ""
-                            controller.saveProviderCredential(draft, for: provider)
-                            credentialDrafts[provider] = ""
-                        }
-                        .buttonStyle(SecondaryActionButtonStyle())
-                        .disabled((credentialDrafts[provider] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                        if controller.canRemoveSavedProviderCredential(for: provider) {
-                            Button("Remove Saved Key") {
-                                Task {
-                                    await controller.removeSavedProviderCredential(for: provider)
-                                }
-                            }
-                            .buttonStyle(SecondaryActionButtonStyle())
-                        }
-                    }
+                    addCredentialSection(
+                        provider: provider,
+                        displayName: displayName,
+                        addingCredential: addingCredential
+                    )
 
                     if let sourceLabel = controller.providerCredentialSourceLabel(for: provider) {
                         Text(sourceLabel)
                             .font(.caption2)
                             .foregroundStyle(Color.white.opacity(0.66))
                     }
-
-                    providerModelSection(for: provider)
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
+                .animation(.easeOut(duration: 0.2), value: pendingCredentialRemovalIndex)
+                .animation(.easeOut(duration: 0.2), value: editingIndex)
+                .animation(.easeOut(duration: 0.2), value: addingCredential)
             }
         }
         .padding(12)
@@ -2574,25 +2730,250 @@ private struct ProviderConfigurationSection: View {
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
-    private func providerModelSection(for provider: AIProvider) -> some View {
-        let searchText = modelSearchQueries[provider] ?? ""
+    private func providerCredentialsSection(
+        provider: AIProvider,
+        displayName: String,
+        credentials: [String],
+        editingIndex: Int?,
+        pendingCredentialRemovalIndex: Int?
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if credentials.isEmpty {
+                Text("No API keys saved yet.")
+                    .font(.caption2)
+                    .foregroundStyle(Color.white.opacity(0.58))
+            } else {
+                ForEach(Array(credentials.enumerated()), id: \.offset) { index, credential in
+                    providerCredentialRow(
+                        provider: provider,
+                        displayName: displayName,
+                        index: index,
+                        credential: credential,
+                        isEditing: editingIndex == index,
+                        pendingRemoval: pendingCredentialRemovalIndex == index
+                    )
+                }
+            }
+        }
+    }
+
+    private func providerCredentialRow(
+        provider: AIProvider,
+        displayName: String,
+        index: Int,
+        credential: String,
+        isEditing: Bool,
+        pendingRemoval: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            if isEditing {
+                providerCredentialEditorRow(
+                    provider: provider,
+                    displayName: displayName,
+                    index: index
+                )
+            } else {
+                providerCredentialDisplayRow(
+                    provider: provider,
+                    displayName: displayName,
+                    index: index,
+                    credential: credential,
+                    pendingRemoval: pendingRemoval
+                )
+            }
+
+            if pendingRemoval {
+                Text("Press remove again to confirm deleting API key \(index + 1).")
+                    .font(.caption2)
+                    .foregroundStyle(FloTheme.warning)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.white.opacity(0.04))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+        )
+    }
+
+    private func providerCredentialEditorRow(
+        provider: AIProvider,
+        displayName: String,
+        index: Int
+    ) -> some View {
+        HStack(spacing: 8) {
+            SecureField("Update API key", text: editCredentialBinding(for: provider))
+                .textFieldStyle(.roundedBorder)
+                .accessibilityLabel("Update \(displayName) API key \(index + 1)")
+
+            Button {
+                saveEditedCredential(at: index, for: provider)
+            } label: {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(FloTheme.success)
+            }
+            .buttonStyle(.plain)
+            .disabled((editingCredentialDraftByProvider[provider] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .accessibilityLabel("Save API key \(index + 1) for \(displayName)")
+
+            Button {
+                cancelEditingCredential(for: provider)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(Color.white.opacity(0.72))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Cancel editing API key \(index + 1) for \(displayName)")
+        }
+    }
+
+    private func providerCredentialDisplayRow(
+        provider: AIProvider,
+        displayName: String,
+        index: Int,
+        credential: String,
+        pendingRemoval: Bool
+    ) -> some View {
+        let isVisible = isCredentialVisible(index, for: provider)
+        let copiedFeedbackVisible = isCredentialRecentlyCopied(index, for: provider)
+
+        return HStack(spacing: 8) {
+            Text(isVisible ? credential : maskedCredential(credential))
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(Color.white.opacity(0.88))
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+
+            Button {
+                toggleCredentialVisibility(index, for: provider)
+            } label: {
+                Image(systemName: isVisible ? "eye.slash.fill" : "eye.fill")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.white.opacity(0.76))
+            .accessibilityLabel(
+                isVisible
+                    ? "Hide API key \(index + 1) for \(displayName)"
+                    : "Show API key \(index + 1) for \(displayName)"
+            )
+
+            Button {
+                copyCredentialAndShowFeedback(at: index, for: provider)
+            } label: {
+                Image(systemName: copiedFeedbackVisible ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(copiedFeedbackVisible ? FloTheme.success : Color.white.opacity(0.76))
+            .accessibilityLabel(
+                copiedFeedbackVisible
+                    ? "Copied API key \(index + 1) for \(displayName)"
+                    : "Copy API key \(index + 1) for \(displayName)"
+            )
+
+            Button {
+                presentedModelPopoverByProvider[provider] = index
+            } label: {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.white.opacity(0.76))
+            .accessibilityLabel("Configure model for API key \(index + 1) for \(displayName)")
+            .popover(isPresented: modelPopoverBinding(for: provider, credentialIndex: index), arrowEdge: .trailing) {
+                credentialModelPopover(
+                    provider: provider,
+                    displayName: displayName,
+                    credentialIndex: index
+                )
+            }
+
+            Button {
+                beginEditingCredential(credential, at: index, for: provider)
+            } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.white.opacity(0.76))
+            .accessibilityLabel("Edit API key \(index + 1) for \(displayName)")
+
+            Button {
+                handleCredentialRemovalTap(at: index, for: provider)
+            } label: {
+                Image(systemName: pendingRemoval ? "checkmark.circle.fill" : "trash.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(pendingRemoval ? FloTheme.warning : FloTheme.danger)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                pendingRemoval
+                    ? "Confirm removal of API key \(index + 1) for \(displayName)"
+                    : "Remove API key \(index + 1) for \(displayName)"
+            )
+        }
+    }
+
+    private func addCredentialSection(
+        provider: AIProvider,
+        displayName: String,
+        addingCredential: Bool
+    ) -> some View {
+        Group {
+            if addingCredential {
+                HStack(spacing: 8) {
+                    SecureField("Add API key", text: addCredentialBinding(for: provider))
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Add API key for \(displayName)")
+
+                    Button("Add") {
+                        addCredential(for: provider)
+                    }
+                    .buttonStyle(SecondaryActionButtonStyle())
+                    .disabled((addCredentialDrafts[provider] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                    Button("Cancel") {
+                        toggleAddCredential(for: provider)
+                    }
+                    .buttonStyle(SecondaryActionButtonStyle())
+                }
+            } else {
+                Button("Add API Key") {
+                    toggleAddCredential(for: provider)
+                }
+                .buttonStyle(SecondaryActionButtonStyle())
+            }
+        }
+    }
+
+    private func credentialModelPopover(
+        provider: AIProvider,
+        displayName: String,
+        credentialIndex: Int
+    ) -> some View {
+        let listViewportHeight: CGFloat = 240
+        let searchText = modelSearchQueriesByCredential[provider]?[credentialIndex] ?? ""
         let models = controller.providerModels(for: provider, matching: searchText)
         let maxVisibleModels = 120
         let visibleModels = Array(models.prefix(maxVisibleModels))
-        let activeRewriteModel = controller.activeRewriteModel(for: provider)
-        let overrideModel = controller.rewriteModelOverride(for: provider)
+        let activeRewriteModel = controller.activeRewriteModel(for: provider, credentialIndex: credentialIndex)
+        let overrideModel = controller.rewriteModelOverride(for: provider, credentialIndex: credentialIndex)
 
-        return VStack(alignment: .leading, spacing: 8) {
-            Divider()
-
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center) {
-                Text("Models (models.dev)")
-                    .font(.caption.weight(.semibold))
+                Text("Model: Key \(credentialIndex + 1)")
+                    .font(.headline)
                     .foregroundStyle(.white)
                 Spacer(minLength: 8)
                 if overrideModel != nil {
-                    Button("Reset Model") {
-                        controller.clearRewriteModelOverride(for: provider)
+                    Button("Reset") {
+                        controller.clearRewriteModelOverride(for: provider, credentialIndex: credentialIndex)
                     }
                     .buttonStyle(SecondaryActionButtonStyle())
                 }
@@ -2600,9 +2981,9 @@ private struct ProviderConfigurationSection: View {
 
             Text("Current rewrite model: \(activeRewriteModel)")
                 .font(.caption2)
-                .foregroundStyle(Color.white.opacity(0.64))
+                .foregroundStyle(Color.white.opacity(0.66))
 
-            TextField("Search provider models", text: modelSearchBinding(for: provider))
+            TextField("Search \(displayName) models", text: credentialModelSearchBinding(for: provider, credentialIndex: credentialIndex))
                 .textFieldStyle(.roundedBorder)
                 .font(.caption)
 
@@ -2613,21 +2994,22 @@ private struct ProviderConfigurationSection: View {
                 Text(emptyStateText)
                     .font(.caption2)
                     .foregroundStyle(Color.white.opacity(0.60))
+                    .frame(maxWidth: .infinity, minHeight: listViewportHeight, alignment: .topLeading)
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 4) {
                         ForEach(visibleModels, id: \.id) { model in
                             let isActive = model.id == activeRewriteModel
-                            let activeLabel = (overrideModel != nil) ? "Selected" : "Active"
+                            let activeLabel = (overrideModel != nil) ? "Selected" : "Inherited"
 
                             Button {
-                                controller.setRewriteModel(model.id, for: provider)
+                                controller.setRewriteModel(model.id, for: provider, credentialIndex: credentialIndex)
                             } label: {
                                 HStack(spacing: 8) {
                                     providerLogoBadge(
                                         for: provider,
                                         size: 16,
-                                        fallbackSystemImage: "square.stack.3d.up.fill"
+                                        fallbackSystemImage: "circle.grid.2x2.fill"
                                     )
 
                                     VStack(alignment: .leading, spacing: 1) {
@@ -2662,26 +3044,21 @@ private struct ProviderConfigurationSection: View {
                                 )
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("Use \(model.name) for \(controller.providerDisplayName(for: provider)) rewrite")
+                            .accessibilityLabel("Use \(model.name) for \(displayName) API key \(credentialIndex + 1)")
                         }
                     }
                 }
-                .frame(maxHeight: 210)
+                .frame(height: listViewportHeight)
 
                 if models.count > visibleModels.count {
-                    Text("Showing \(visibleModels.count) of \(models.count) models. Refine your search to narrow this list.")
+                    Text("Showing \(visibleModels.count) of \(models.count) models. Refine search to narrow this list.")
                         .font(.caption2)
                         .foregroundStyle(Color.white.opacity(0.58))
                 }
             }
         }
-    }
-
-    private func modelSearchBinding(for provider: AIProvider) -> Binding<String> {
-        Binding(
-            get: { modelSearchQueries[provider] ?? "" },
-            set: { modelSearchQueries[provider] = $0 }
-        )
+        .padding(14)
+        .frame(width: 380)
     }
 
     @ViewBuilder
@@ -2690,25 +3067,11 @@ private struct ProviderConfigurationSection: View {
         iconSize: CGFloat,
         fallbackSystemImage: String
     ) -> some View {
-        if let logoURL = controller.providerLogoURL(for: provider) {
-            AsyncImage(url: logoURL, transaction: Transaction(animation: .easeInOut(duration: 0.16))) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: iconSize, height: iconSize)
-                default:
-                    Image(systemName: fallbackSystemImage)
-                        .font(.system(size: max(10, iconSize * 0.72), weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.76))
-                }
-            }
-        } else {
-            Image(systemName: fallbackSystemImage)
-                .font(.system(size: max(10, iconSize * 0.72), weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.76))
-        }
+        ModelsDevProviderLogoView(
+            logoURL: controller.providerLogoURL(for: provider),
+            iconSize: iconSize,
+            fallbackSystemImage: fallbackSystemImage
+        )
     }
 
     private func providerLogoBadge(
@@ -2735,10 +3098,17 @@ private struct ProviderConfigurationSection: View {
         )
     }
 
-    private func credentialDraftBinding(for provider: AIProvider) -> Binding<String> {
+    private func addCredentialBinding(for provider: AIProvider) -> Binding<String> {
         Binding(
-            get: { credentialDrafts[provider] ?? "" },
-            set: { credentialDrafts[provider] = $0 }
+            get: { addCredentialDrafts[provider] ?? "" },
+            set: { addCredentialDrafts[provider] = $0 }
+        )
+    }
+
+    private func editCredentialBinding(for provider: AIProvider) -> Binding<String> {
+        Binding(
+            get: { editingCredentialDraftByProvider[provider] ?? "" },
+            set: { editingCredentialDraftByProvider[provider] = $0 }
         )
     }
 }
@@ -2780,6 +3150,59 @@ private struct ProviderReorderDropDelegate: DropDelegate {
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
         DropProposal(operation: .move)
+    }
+}
+
+private struct ModelsDevProviderLogoView: View {
+    let logoURL: URL?
+    let iconSize: CGFloat
+    let fallbackSystemImage: String
+
+    @State private var logoImage: NSImage?
+
+    var body: some View {
+        Group {
+            if let logoImage {
+                Image(nsImage: logoImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: iconSize, height: iconSize)
+            } else {
+                Image(systemName: fallbackSystemImage)
+                    .font(.system(size: max(10, iconSize * 0.72), weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.76))
+            }
+        }
+        .task(id: logoURL) {
+            await loadLogo()
+        }
+    }
+
+    @MainActor
+    private func loadLogo() async {
+        guard let logoURL else {
+            logoImage = nil
+            return
+        }
+
+        var request = URLRequest(url: logoURL)
+        request.cachePolicy = .returnCacheDataElseLoad
+        request.timeoutInterval = 12
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
+                logoImage = nil
+                return
+            }
+            logoImage = Self.decodeLogoImage(from: data)
+        } catch {
+            logoImage = nil
+        }
+    }
+
+    private static func decodeLogoImage(from data: Data) -> NSImage? {
+        return NSImage(data: data)
     }
 }
 

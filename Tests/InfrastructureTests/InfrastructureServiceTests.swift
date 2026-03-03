@@ -708,6 +708,66 @@ struct InfrastructureServiceTests {
     }
 
     @Test
+    func failoverRewriteAppliesCredentialSpecificModelOverride() async throws {
+        URLProtocolStub.reset()
+        let capturedBodies = LockedDataArray()
+        let capturedAuthHeaders = LockedStringArray()
+
+        URLProtocolStub.handler = { request in
+            if let body = requestBodyData(request) {
+                capturedBodies.append(body)
+            }
+            capturedAuthHeaders.append(request.value(forHTTPHeaderField: "Authorization") ?? "")
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let payload = #"{"choices":[{"message":{"content":"rewritten with key-specific model"}}]}"#
+            return (response, Data(payload.utf8))
+        }
+
+        let env = [
+            "FLO_AI_PROVIDER_ORDER": "openai",
+            "FLO_CHATGPT_OAUTH_ENABLED": "false"
+        ]
+        let configuration = FloConfiguration.loadFromEnvironment(env)
+        let credentialStore = InMemoryProviderCredentialStore(credentialsByProvider: [
+            "openai": ["openai_key_1"]
+        ])
+        let routingStore = InMemoryProviderRoutingStore(
+            overrides: ProviderRoutingOverrides(
+                rewriteModelsByProviderCredentialIndex: [
+                    "openai": [
+                        "0": "gpt-4.1-mini"
+                    ]
+                ]
+            )
+        )
+
+        let service = FailoverDictationRewriteService(
+            configuration: configuration,
+            urlSession: makeSession(),
+            credentialStore: credentialStore,
+            routingStore: routingStore
+        )
+
+        let rewritten = try await service.rewrite(
+            transcript: "apply changes",
+            authToken: "",
+            preferences: .default
+        )
+        #expect(rewritten == "rewritten with key-specific model")
+        #expect(capturedAuthHeaders.values == ["Bearer openai_key_1"])
+
+        guard let body = capturedBodies.first else {
+            Issue.record("Expected rewrite request body.")
+            return
+        }
+        guard let json = try JSONSerialization.jsonObject(with: body) as? [String: Any] else {
+            Issue.record("Expected JSON rewrite request body.")
+            return
+        }
+        #expect(json["model"] as? String == "gpt-4.1-mini")
+    }
+
+    @Test
     func failoverTranscriptionAppliesRuntimeRoutingOverridesFromStore() async throws {
         let env = [
             "FLO_AI_PROVIDER_ORDER": "openai,gemini",

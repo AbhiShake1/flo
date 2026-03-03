@@ -4,6 +4,7 @@ import Foundation
 private struct ProviderCredentialCandidate: Sendable {
     let provider: AIProvider
     let token: String
+    let credentialIndex: Int?
 }
 
 private enum ProviderOperation: String, Sendable {
@@ -166,7 +167,8 @@ private func providerCredentialCandidates(
             continue
         }
 
-        let keychainCredentials = dynamicCredentialPool[provider] ?? []
+        let keychainCredentials = uniqueTokens(dynamicCredentialPool[provider] ?? [])
+        let keychainIndexByToken = Dictionary(uniqueKeysWithValues: keychainCredentials.enumerated().map { ($1, $0) })
         var merged = uniqueTokens(keychainCredentials + configuration.credentials(for: provider))
 
         if provider == configuration.provider {
@@ -179,7 +181,13 @@ private func providerCredentialCandidates(
 
         let rotated = await routingState.rotatedTokens(for: provider, tokens: merged)
         for token in rotated {
-            result.append(ProviderCredentialCandidate(provider: provider, token: token))
+            result.append(
+                ProviderCredentialCandidate(
+                    provider: provider,
+                    token: token,
+                    credentialIndex: keychainIndexByToken[token]
+                )
+            )
             if result.count >= maxAttempts {
                 return result
             }
@@ -393,6 +401,8 @@ public final class FailoverTTSService: TTSService {
 public final class FailoverDictationRewriteService: DictationRewriteService, @unchecked Sendable {
     private let configuration: FloConfiguration
     private let services: [AIProvider: DictationRewriteService]
+    private let usesInjectedServices: Bool
+    private let urlSession: URLSession
     private let credentialStore: ProviderCredentialStore?
     private let routingStore: ProviderRoutingStore?
     private let routingState = ProviderRoutingState()
@@ -405,26 +415,15 @@ public final class FailoverDictationRewriteService: DictationRewriteService, @un
         routingStore: ProviderRoutingStore? = nil
     ) {
         self.configuration = configuration
+        self.urlSession = urlSession
         self.credentialStore = credentialStore
         self.routingStore = routingStore
         if let services {
             self.services = services
+            self.usesInjectedServices = true
         } else {
-            var built: [AIProvider: DictationRewriteService] = [:]
-            for provider in AIProvider.allCases where configuration.supportsRewrite(for: provider) {
-                if provider == .gemini || provider == .google {
-                    built[provider] = GeminiDictationRewriteService(
-                        configuration: configuration.scoped(to: provider),
-                        urlSession: urlSession
-                    )
-                } else {
-                    built[provider] = OpenAIDictationRewriteService(
-                        configuration: configuration.scoped(to: provider),
-                        urlSession: urlSession
-                    )
-                }
-            }
-            self.services = built
+            self.services = [:]
+            self.usesInjectedServices = false
         }
     }
 
@@ -450,9 +449,14 @@ public final class FailoverDictationRewriteService: DictationRewriteService, @un
             return transcript
         }
 
+        let routingOverrides = routingStore?.loadOverrides() ?? .default
         var lastError: Error = FloError.unauthorized
         for candidate in candidates {
-            guard let service = services[candidate.provider] else {
+            guard let service = rewriteService(
+                for: candidate,
+                activeConfiguration: activeConfiguration,
+                routingOverrides: routingOverrides
+            ) else {
                 continue
             }
 
@@ -479,6 +483,61 @@ public final class FailoverDictationRewriteService: DictationRewriteService, @un
         }
 
         throw lastError
+    }
+
+    private func rewriteService(
+        for candidate: ProviderCredentialCandidate,
+        activeConfiguration: FloConfiguration,
+        routingOverrides: ProviderRoutingOverrides
+    ) -> DictationRewriteService? {
+        if usesInjectedServices {
+            return services[candidate.provider]
+        }
+
+        guard activeConfiguration.supportsRewrite(for: candidate.provider) else {
+            return nil
+        }
+
+        let credentialSpecificOverride = rewriteModelOverride(for: candidate, routingOverrides: routingOverrides)
+        let resolvedConfiguration: FloConfiguration
+        if let credentialSpecificOverride {
+            resolvedConfiguration = activeConfiguration.applyingRoutingOverrides(
+                ProviderRoutingOverrides(
+                    rewriteModelsByProvider: [candidate.provider.rawValue: credentialSpecificOverride]
+                )
+            )
+        } else {
+            resolvedConfiguration = activeConfiguration
+        }
+
+        let scoped = resolvedConfiguration.scoped(to: candidate.provider)
+        if candidate.provider == .gemini || candidate.provider == .google {
+            return GeminiDictationRewriteService(
+                configuration: scoped,
+                urlSession: urlSession
+            )
+        }
+        return OpenAIDictationRewriteService(
+            configuration: scoped,
+            urlSession: urlSession
+        )
+    }
+
+    private func rewriteModelOverride(
+        for candidate: ProviderCredentialCandidate,
+        routingOverrides: ProviderRoutingOverrides
+    ) -> String? {
+        guard
+            let credentialIndex = candidate.credentialIndex,
+            credentialIndex >= 0,
+            let providerMap = routingOverrides.rewriteModelsByProviderCredentialIndex?[candidate.provider.rawValue],
+            let modelID = providerMap[String(credentialIndex)]?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !modelID.isEmpty
+        else {
+            return nil
+        }
+
+        return modelID
     }
 
     private func credentialPoolSnapshot() -> [AIProvider: [String]] {

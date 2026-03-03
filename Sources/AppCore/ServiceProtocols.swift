@@ -77,6 +77,7 @@ public struct ProviderRoutingOverrides: Codable, Equatable, Sendable {
     public let cooldownSeconds: Int?
     public let allowedProviders: [String]?
     public let rewriteModelsByProvider: [String: String]?
+    public let rewriteModelsByProviderCredentialIndex: [String: [String: String]]?
 
     public init(
         providerOrder: [String] = [],
@@ -85,7 +86,8 @@ public struct ProviderRoutingOverrides: Codable, Equatable, Sendable {
         failureThreshold: Int? = nil,
         cooldownSeconds: Int? = nil,
         allowedProviders: [String]? = nil,
-        rewriteModelsByProvider: [String: String]? = nil
+        rewriteModelsByProvider: [String: String]? = nil,
+        rewriteModelsByProviderCredentialIndex: [String: [String: String]]? = nil
     ) {
         self.providerOrder = providerOrder
         self.allowCrossProviderFallback = allowCrossProviderFallback
@@ -94,6 +96,7 @@ public struct ProviderRoutingOverrides: Codable, Equatable, Sendable {
         self.cooldownSeconds = cooldownSeconds
         self.allowedProviders = allowedProviders
         self.rewriteModelsByProvider = rewriteModelsByProvider
+        self.rewriteModelsByProviderCredentialIndex = rewriteModelsByProviderCredentialIndex
     }
 
     public static let `default` = ProviderRoutingOverrides()

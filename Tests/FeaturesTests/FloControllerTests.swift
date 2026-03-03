@@ -104,6 +104,155 @@ struct FloControllerTests {
 
     @Test
     @MainActor
+    func addProviderCredentialAppendsToExistingPool() async {
+        let configuration = makeConfiguration(oauth: nil, provider: .gemini, geminiApiKey: nil)
+        let dependencies = TestDependencies(configuration: configuration)
+        dependencies.providerCredentialStore.credentialPools["gemini"] = [
+            "gemini_saved_1",
+            "gemini_saved_2"
+        ]
+        let controller = FloController(environment: dependencies.environment)
+
+        await controller.bootstrap()
+        controller.addProviderCredential("gemini_saved_3", for: .gemini)
+
+        #expect(dependencies.providerCredentialStore.credentialPools["gemini"] == [
+            "gemini_saved_1",
+            "gemini_saved_2",
+            "gemini_saved_3"
+        ])
+        #expect(controller.statusMessage == "Gemini API key added. Saved keys: 3.")
+    }
+
+    @Test
+    @MainActor
+    func updateProviderCredentialReplacesOnlySelectedIndex() async {
+        let configuration = makeConfiguration(oauth: nil, provider: .gemini, geminiApiKey: nil)
+        let dependencies = TestDependencies(configuration: configuration)
+        dependencies.providerCredentialStore.credentialPools["gemini"] = [
+            "gemini_saved_1",
+            "gemini_saved_2",
+            "gemini_saved_3"
+        ]
+        let controller = FloController(environment: dependencies.environment)
+
+        await controller.bootstrap()
+        controller.updateProviderCredential("gemini_saved_2b", at: 1, for: .gemini)
+
+        #expect(dependencies.providerCredentialStore.credentialPools["gemini"] == [
+            "gemini_saved_1",
+            "gemini_saved_2b",
+            "gemini_saved_3"
+        ])
+        #expect(controller.statusMessage == "Gemini API key updated.")
+    }
+
+    @Test
+    @MainActor
+    func removeProviderCredentialDeletesOnlyTargetedIndex() async {
+        let configuration = makeConfiguration(oauth: nil, provider: .gemini, geminiApiKey: nil)
+        let dependencies = TestDependencies(configuration: configuration)
+        dependencies.providerCredentialStore.credentialPools["gemini"] = [
+            "gemini_saved_1",
+            "gemini_saved_2",
+            "gemini_saved_3"
+        ]
+        let controller = FloController(environment: dependencies.environment)
+
+        await controller.bootstrap()
+        await controller.removeProviderCredential(at: 1, for: .gemini)
+
+        #expect(dependencies.providerCredentialStore.credentialPools["gemini"] == [
+            "gemini_saved_1",
+            "gemini_saved_3"
+        ])
+        #expect(controller.statusMessage == "Gemini API key removed. Saved keys: 2.")
+    }
+
+    @Test
+    @MainActor
+    func copyProviderCredentialCopiesSelectedIndexToClipboard() async {
+        let configuration = makeConfiguration(oauth: nil, provider: .gemini, geminiApiKey: nil)
+        let dependencies = TestDependencies(configuration: configuration)
+        dependencies.providerCredentialStore.credentialPools["gemini"] = [
+            "gemini_saved_1",
+            "gemini_saved_2",
+            "gemini_saved_3"
+        ]
+        let controller = FloController(environment: dependencies.environment)
+
+        await controller.bootstrap()
+        setSystemClipboardText("seed")
+        let copied = controller.copyProviderCredential(at: 1, for: .gemini)
+
+        #expect(copied == true)
+        #expect(systemClipboardText() == "gemini_saved_2")
+        #expect(controller.statusMessage == "Gemini API key copied to clipboard.")
+    }
+
+    @Test
+    @MainActor
+    func perCredentialRewriteModelOverridePersistsByIndex() async {
+        let configuration = makeConfiguration(oauth: nil, provider: .gemini, geminiApiKey: nil)
+        let dependencies = TestDependencies(configuration: configuration)
+        dependencies.providerCredentialStore.credentialPools["gemini"] = [
+            "gemini_saved_1",
+            "gemini_saved_2"
+        ]
+        let controller = FloController(environment: dependencies.environment)
+
+        await controller.bootstrap()
+        controller.setRewriteModel("models/gemini-2.5-flash", for: .gemini, credentialIndex: 0)
+        controller.setRewriteModel("models/gemini-2.5-pro", for: .gemini, credentialIndex: 1)
+
+        #expect(controller.rewriteModelOverride(for: .gemini, credentialIndex: 0) == "models/gemini-2.5-flash")
+        #expect(controller.rewriteModelOverride(for: .gemini, credentialIndex: 1) == "models/gemini-2.5-pro")
+        #expect(
+            dependencies.providerRoutingStore.overrides.rewriteModelsByProviderCredentialIndex?["gemini"] == [
+                "0": "models/gemini-2.5-flash",
+                "1": "models/gemini-2.5-pro"
+            ]
+        )
+    }
+
+    @Test
+    @MainActor
+    func addingCredentialInheritsFirstCredentialModelSelection() async {
+        let configuration = makeConfiguration(oauth: nil, provider: .gemini, geminiApiKey: nil)
+        let dependencies = TestDependencies(configuration: configuration)
+        dependencies.providerCredentialStore.credentialPools["gemini"] = ["gemini_saved_1"]
+        let controller = FloController(environment: dependencies.environment)
+
+        await controller.bootstrap()
+        controller.setRewriteModel("models/gemini-2.5-pro", for: .gemini, credentialIndex: 0)
+        controller.addProviderCredential("gemini_saved_2", for: .gemini)
+
+        #expect(controller.rewriteModelOverride(for: .gemini, credentialIndex: 1) == "models/gemini-2.5-pro")
+    }
+
+    @Test
+    @MainActor
+    func removingCredentialShiftsPerCredentialModelOverrides() async {
+        let configuration = makeConfiguration(oauth: nil, provider: .gemini, geminiApiKey: nil)
+        let dependencies = TestDependencies(configuration: configuration)
+        dependencies.providerCredentialStore.credentialPools["gemini"] = [
+            "gemini_saved_1",
+            "gemini_saved_2",
+            "gemini_saved_3"
+        ]
+        let controller = FloController(environment: dependencies.environment)
+
+        await controller.bootstrap()
+        controller.setRewriteModel("models/gemini-2.5-flash", for: .gemini, credentialIndex: 0)
+        controller.setRewriteModel("models/gemini-2.5-pro", for: .gemini, credentialIndex: 2)
+        await controller.removeProviderCredential(at: 1, for: .gemini)
+
+        #expect(controller.rewriteModelOverride(for: .gemini, credentialIndex: 0) == "models/gemini-2.5-flash")
+        #expect(controller.rewriteModelOverride(for: .gemini, credentialIndex: 1) == "models/gemini-2.5-pro")
+    }
+
+    @Test
+    @MainActor
     func saveProviderCredentialForNonPrimaryProviderIsSupported() async {
         let configuration = makeConfiguration(oauth: sampleOAuthConfiguration(), provider: .openai, geminiApiKey: nil)
         let dependencies = TestDependencies(configuration: configuration)
