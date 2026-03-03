@@ -112,15 +112,21 @@ public struct FloatingBarActions {
     public let toggleDictation: () -> Void
     public let triggerReadSelected: () -> Void
     public let openMainWindow: () -> Void
+    public let dictationHint: String
+    public let readSelectedHint: String
 
     public init(
         toggleDictation: @escaping () -> Void,
         triggerReadSelected: @escaping () -> Void,
-        openMainWindow: @escaping () -> Void
+        openMainWindow: @escaping () -> Void,
+        dictationHint: String = "Hold your dictation shortcut to start dictating, or click to toggle.",
+        readSelectedHint: String = "Read selected text aloud."
     ) {
         self.toggleDictation = toggleDictation
         self.triggerReadSelected = triggerReadSelected
         self.openMainWindow = openMainWindow
+        self.dictationHint = dictationHint
+        self.readSelectedHint = readSelectedHint
     }
 }
 

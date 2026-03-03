@@ -424,6 +424,7 @@ public final class FloController: ObservableObject {
             environment.shortcutStore.saveBindings(normalized)
             shortcutBindings = normalized
             configureHotkeysIfAllowed()
+            configureFloatingBarActions()
             statusMessage = nil
             environment.logger.info("Updated shortcut for \(action.displayName) to \(combo.humanReadable).")
         } catch {
@@ -437,6 +438,7 @@ public final class FloController: ObservableObject {
         environment.shortcutStore.saveBindings(defaults)
         shortcutBindings = defaults
         configureHotkeysIfAllowed()
+        configureFloatingBarActions()
         environment.logger.info("Shortcuts reset to defaults.")
     }
 
@@ -1140,6 +1142,8 @@ public final class FloController: ObservableObject {
     }
 
     private func configureFloatingBarActions() {
+        let dictationHint = "Hold \(shortcutDisplay(for: .dictationHold)) to start dictating, or click to toggle."
+        let readHint = "Press \(shortcutDisplay(for: .readSelectedText)) or click to narrate selected text."
         environment.floatingBarManager.setActions(
             FloatingBarActions(
                 toggleDictation: { [weak self] in
@@ -1154,9 +1158,25 @@ public final class FloController: ObservableObject {
                 },
                 openMainWindow: {
                     NSApp.activate(ignoringOtherApps: true)
-                }
+                },
+                dictationHint: dictationHint,
+                readSelectedHint: readHint
             )
         )
+    }
+
+    private func shortcutDisplay(for action: ShortcutAction) -> String {
+        if let binding = shortcutBindings.first(where: { $0.action == action }) {
+            return binding.combo.humanReadable
+        }
+        switch action {
+        case .dictationHold:
+            return DefaultShortcuts.dictation.combo.humanReadable
+        case .readSelectedText:
+            return DefaultShortcuts.readSelected.combo.humanReadable
+        case .pushToTalkToggle:
+            return "push-to-talk"
+        }
     }
 
     private func toggleDictationFromFloatingBar() async {
@@ -1216,7 +1236,7 @@ public final class FloController: ObservableObject {
 
         stateResetTask?.cancel()
         stateResetTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
             await MainActor.run {
                 self?.setRecorderState(.idle)
             }
