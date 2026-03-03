@@ -921,7 +921,7 @@ private struct SettingsStageView: View {
                         Text("Workspace Settings")
                             .font(.system(size: 24, weight: .semibold))
                             .foregroundStyle(FloTheme.textPrimary)
-                        Text("Tune shortcuts, voice output, permissions, and core system controls.")
+                        Text("Tune shortcuts, voice output, and core system controls.")
                             .foregroundStyle(FloTheme.textSecondary)
                     }
 
@@ -966,11 +966,6 @@ private struct SettingsStageView: View {
                 alignment: .leading,
                 spacing: 16
             ) {
-                if showPermissionsSection {
-                    CardContainer {
-                        PermissionManagementPanel(controller: controller, showPrimaryPrompt: false)
-                    }
-                }
                 if showHotkeysSection {
                     CardContainer {
                         ShortcutConfigurationSection(controller: controller)
@@ -984,6 +979,24 @@ private struct SettingsStageView: View {
                 if showSystemSection {
                     CardContainer {
                         UtilityActionsSection(controller: controller)
+                    }
+                }
+            }
+
+            if showPermissionsRedirectSection {
+                CardContainer {
+                    HStack(alignment: .center, spacing: 12) {
+                        Image(systemName: "hand.raised")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(FloTheme.accentSoft)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Permissions moved to Permissions tab")
+                                .font(.headline)
+                                .foregroundStyle(FloTheme.textPrimary)
+                            Text("Use the sidebar Permissions tab to grant microphone, accessibility, and input monitoring access.")
+                                .font(.subheadline)
+                                .foregroundStyle(FloTheme.textSecondary)
+                        }
                     }
                 }
             }
@@ -1060,7 +1073,7 @@ private struct SettingsStageView: View {
         return searchTerms.allSatisfy { haystack.contains($0) }
     }
 
-    private var showPermissionsSection: Bool {
+    private var showPermissionsRedirectSection: Bool {
         matches(["permissions", "microphone", "accessibility", "input monitoring", "grant"])
     }
 
@@ -1073,7 +1086,7 @@ private struct SettingsStageView: View {
     }
 
     private var showSystemSection: Bool {
-        matches(["system", "live typing", "refresh", "updates"])
+        matches(["system", "live typing", "updates"])
     }
 
     private var showVoiceRedirectSection: Bool {
@@ -1090,7 +1103,7 @@ private struct SettingsStageView: View {
 
     private var showEmptyState: Bool {
         !searchTerms.isEmpty &&
-            !showPermissionsSection &&
+            !showPermissionsRedirectSection &&
             !showHotkeysSection &&
             !showDictationSection &&
             !showSystemSection &&
@@ -2016,18 +2029,11 @@ private struct UtilityActionsSection: View {
                 .font(.headline)
                 .foregroundStyle(.white)
 
-            HStack(spacing: 8) {
-                Button("Refresh Permissions") {
-                    controller.refreshPermissions()
+            if let updateURL = controller.manualUpdateURL {
+                Button("Check for Updates") {
+                    NSWorkspace.shared.open(updateURL)
                 }
                 .buttonStyle(SecondaryActionButtonStyle())
-
-                if let updateURL = controller.manualUpdateURL {
-                    Button("Check for Updates") {
-                        NSWorkspace.shared.open(updateURL)
-                    }
-                    .buttonStyle(SecondaryActionButtonStyle())
-                }
             }
 
             Toggle(isOn: liveDictationBinding) {
