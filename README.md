@@ -3,6 +3,19 @@
 `flo` is a macOS 15+ menu bar app for global dictation and read-aloud shortcuts.
 It supports multi-provider key pools and failover routing via `.env.local`.
 
+## Open Source
+
+- License: [MIT](LICENSE)
+- Contribution guide: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- Security policy: [SECURITY.md](SECURITY.md)
+- Support policy: [SUPPORT.md](SUPPORT.md)
+
+## Release Versioning
+
+- Tags follow `vMAJOR.MINOR.PATCH` (for example `v0.1.0`).
+- Release artifacts are built from tags and include versioned names (for example `FloApp-0.1.0-arm64.dmg`).
+
 ## Implemented Scope
 
 - Auth-gated app shell with ChatGPT OAuth lifecycle (`loggedOut`, `authenticating`, `loggedIn`, `authError`).
@@ -31,7 +44,7 @@ It supports multi-provider key pools and failover routing via `.env.local`.
 - `Tests/AppCoreTests`: unit tests for core validation logic.
 - `Tests/InfrastructureTests`: integration-focused tests for retry policy, host allowlisting, and storage.
 - `Tests/FeaturesTests`: controller state/error transition tests with mocked dependencies.
-- `.github/workflows/ci.yml`: macOS CI for build and tests.
+- `.github/workflows`: CI, dependency review, security scans, and release automation.
 
 ## Configuration
 
@@ -65,6 +78,11 @@ Environment variables:
 - `FLO_RETAIN_AUDIO_DEBUG=true` (optional debug mode)
 - `FLO_FEATURE_GLOBAL_HOTKEYS`, `FLO_FEATURE_DICTATION`, `FLO_FEATURE_READ_ALOUD`
 - `FLO_MANUAL_UPDATE_URL` (optional release page URL)
+
+Release-only environment variables:
+
+- `FLO_RELEASE_VERSION` (required for release bundling and notarization, e.g. `0.1.0`)
+- `FLO_BUILD_NUMBER` (required build number for `CFBundleVersion`)
 
 Local config files are auto-loaded from the repo root in this order:
 
@@ -114,4 +132,34 @@ This toolchain requires explicit test framework flags:
 
 ```bash
 ./scripts/manual_smoke_harness.sh
+```
+
+## Install
+
+Direct download:
+
+- Download notarized artifacts from GitHub Releases.
+
+Homebrew cask (tap fallback path):
+
+```bash
+# after publishing AbhiShake1/homebrew-flo
+brew tap AbhiShake1/flo
+brew install --cask flo
+```
+
+Official `homebrew/cask` submission is attempted first. If unavailable, publish the fallback tap cask from `Casks/flo.rb` and then use the command above.
+
+## Release
+
+Create a notarized app bundle and DMG:
+
+```bash
+FLO_RELEASE_VERSION=0.1.0 \
+FLO_BUILD_NUMBER=1 \
+FLO_APPLE_TEAM_ID=<team-id> \
+FLO_APPLE_ID=<apple-id-email> \
+FLO_APPLE_APP_SPECIFIC_PASSWORD=<app-specific-password> \
+FLO_DEVELOPER_IDENTITY="<Developer ID Application: ...>" \
+./scripts/notarize_release.sh
 ```

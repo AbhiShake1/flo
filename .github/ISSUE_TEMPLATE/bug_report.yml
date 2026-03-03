@@ -1,0 +1,68 @@
+name: Bug report
+description: Report a reproducible defect in flo
+title: "[bug]: "
+labels: ["type:bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Please include concrete reproduction details.
+
+  - type: input
+    id: version
+    attributes:
+      label: flo version
+      description: Tag/release version (for example `v0.1.0`)
+      placeholder: v0.1.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: CPU architecture
+      options:
+        - arm64 (Apple Silicon)
+        - x86_64 (Intel)
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Provide an ordered list.
+      placeholder: |
+        1. Launch app
+        2. Press Option+Space
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste logs/screenshots if available.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues before filing.
+          required: true
