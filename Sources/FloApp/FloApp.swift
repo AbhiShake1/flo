@@ -1052,6 +1052,17 @@ private struct VoiceStudioStageView: View {
         min(1, max(Double(controller.latestAudioLevel), controller.isVoicePreviewInProgress ? 0.58 : 0.12))
     }
 
+    private var currentVoiceName: String {
+        guard !voices.isEmpty else {
+            return "default"
+        }
+        return voices[selectedVoiceIndex]
+    }
+
+    private var orbPalette: VoiceOrbPalette {
+        VoiceOrbPalette.forVoice(currentVoiceName)
+    }
+
     private var canPreviewVoice: Bool {
         controller.isAuthenticated &&
             !controller.isVoicePreviewInProgress &&
@@ -1063,7 +1074,8 @@ private struct VoiceStudioStageView: View {
             VStack(spacing: 22) {
                 AtmosphericVoiceOrb(
                     activityLevel: activityLevel,
-                    isActive: controller.isVoicePreviewInProgress || controller.recorderState == .listening
+                    isActive: controller.isVoicePreviewInProgress || controller.recorderState == .listening,
+                    palette: orbPalette
                 )
                 .frame(maxWidth: .infinity)
 
@@ -1075,7 +1087,7 @@ private struct VoiceStudioStageView: View {
                             .font(.system(size: 14, weight: .semibold))
                             .frame(width: 34, height: 34)
                     }
-                    .buttonStyle(OrbDirectionButtonStyle())
+                    .buttonStyle(OrbDirectionButtonStyle(accentColor: orbPalette.coreAccent))
                     .disabled(voices.count < 2 || !controller.isAuthenticated || controller.isVoicePreviewInProgress)
                     .accessibilityLabel("Previous voice")
 
@@ -1096,7 +1108,7 @@ private struct VoiceStudioStageView: View {
                             .font(.system(size: 14, weight: .semibold))
                             .frame(width: 34, height: 34)
                     }
-                    .buttonStyle(OrbDirectionButtonStyle())
+                    .buttonStyle(OrbDirectionButtonStyle(accentColor: orbPalette.coreAccent))
                     .disabled(voices.count < 2 || !controller.isAuthenticated || controller.isVoicePreviewInProgress)
                     .accessibilityLabel("Next voice")
                 }
@@ -1108,7 +1120,12 @@ private struct VoiceStudioStageView: View {
                                 Button(voice.capitalized) {
                                     applyVoice(at: index, previewAfterSelection: true)
                                 }
-                                .buttonStyle(VoiceChipButtonStyle(isSelected: index == selectedVoiceIndex))
+                                .buttonStyle(
+                                    VoiceChipButtonStyle(
+                                        isSelected: index == selectedVoiceIndex,
+                                        accentColor: orbPalette.coreAccent
+                                    )
+                                )
                                 .disabled(!controller.isAuthenticated || controller.isVoicePreviewInProgress)
                             }
                         }
@@ -1202,9 +1219,299 @@ private struct VoiceStudioStageView: View {
     }
 }
 
+private struct VoiceOrbPalette {
+    let coreCenter: Color
+    let coreSecondary: Color
+    let coreAccent: Color
+    let edgeTone: Color
+    let haloTone: Color
+    let rippleTone: Color
+    let mistPrimary: Color
+    let mistSecondary: Color
+
+    static func forVoice(_ voiceName: String) -> VoiceOrbPalette {
+        let normalized = voiceName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        if normalized.contains("brit") || normalized.contains("uk") || normalized.contains("england") {
+            return palette(
+                center: Color(red: 0.96, green: 0.97, blue: 1.0),
+                secondary: Color(red: 0.78, green: 0.86, blue: 1.0),
+                accent: Color(red: 0.37, green: 0.57, blue: 0.99),
+                edge: Color(red: 0.66, green: 0.54, blue: 0.95),
+                halo: Color(red: 0.52, green: 0.65, blue: 1.0),
+                ripple: Color(red: 0.70, green: 0.82, blue: 1.0),
+                mistA: Color(red: 0.72, green: 0.86, blue: 1.0),
+                mistB: Color(red: 0.63, green: 0.56, blue: 0.95)
+            )
+        }
+        if normalized.contains("austr") || normalized.contains("au") {
+            return palette(
+                center: Color(red: 0.98, green: 0.97, blue: 0.93),
+                secondary: Color(red: 0.82, green: 0.90, blue: 1.0),
+                accent: Color(red: 0.27, green: 0.64, blue: 0.98),
+                edge: Color(red: 0.94, green: 0.64, blue: 0.33),
+                halo: Color(red: 0.51, green: 0.76, blue: 1.0),
+                ripple: Color(red: 0.66, green: 0.84, blue: 1.0),
+                mistA: Color(red: 0.74, green: 0.89, blue: 1.0),
+                mistB: Color(red: 0.95, green: 0.67, blue: 0.39)
+            )
+        }
+        if normalized.contains("india") || normalized.contains("hindi") || normalized.contains("nepal") {
+            return palette(
+                center: Color(red: 1.0, green: 0.97, blue: 0.93),
+                secondary: Color(red: 0.81, green: 0.91, blue: 1.0),
+                accent: Color(red: 0.98, green: 0.58, blue: 0.24),
+                edge: Color(red: 0.26, green: 0.63, blue: 0.97),
+                halo: Color(red: 0.68, green: 0.77, blue: 1.0),
+                ripple: Color(red: 0.99, green: 0.72, blue: 0.34),
+                mistA: Color(red: 1.0, green: 0.76, blue: 0.43),
+                mistB: Color(red: 0.36, green: 0.67, blue: 0.99)
+            )
+        }
+
+        switch normalized {
+        case "alloy":
+            return palette(
+                center: Color(red: 0.95, green: 0.98, blue: 1.0),
+                secondary: Color(red: 0.81, green: 0.90, blue: 0.98),
+                accent: Color(red: 0.37, green: 0.66, blue: 0.96),
+                edge: Color(red: 0.57, green: 0.62, blue: 0.90),
+                halo: Color(red: 0.44, green: 0.72, blue: 1.0),
+                ripple: Color(red: 0.66, green: 0.86, blue: 1.0),
+                mistA: Color(red: 0.73, green: 0.89, blue: 1.0),
+                mistB: Color(red: 0.63, green: 0.73, blue: 0.96)
+            )
+        case "ash":
+            return palette(
+                center: Color(red: 0.95, green: 0.95, blue: 1.0),
+                secondary: Color(red: 0.79, green: 0.82, blue: 0.95),
+                accent: Color(red: 0.45, green: 0.56, blue: 0.88),
+                edge: Color(red: 0.63, green: 0.48, blue: 0.84),
+                halo: Color(red: 0.49, green: 0.60, blue: 0.96),
+                ripple: Color(red: 0.70, green: 0.74, blue: 0.98),
+                mistA: Color(red: 0.68, green: 0.78, blue: 0.96),
+                mistB: Color(red: 0.63, green: 0.53, blue: 0.89)
+            )
+        case "ballad":
+            return palette(
+                center: Color(red: 1.0, green: 0.95, blue: 0.98),
+                secondary: Color(red: 0.90, green: 0.82, blue: 0.97),
+                accent: Color(red: 0.65, green: 0.53, blue: 0.95),
+                edge: Color(red: 0.91, green: 0.52, blue: 0.77),
+                halo: Color(red: 0.76, green: 0.62, blue: 0.98),
+                ripple: Color(red: 0.95, green: 0.69, blue: 0.88),
+                mistA: Color(red: 0.92, green: 0.74, blue: 0.98),
+                mistB: Color(red: 0.88, green: 0.58, blue: 0.82)
+            )
+        case "coral":
+            return palette(
+                center: Color(red: 0.99, green: 0.96, blue: 0.93),
+                secondary: Color(red: 0.88, green: 0.92, blue: 0.99),
+                accent: Color(red: 0.97, green: 0.53, blue: 0.42),
+                edge: Color(red: 0.33, green: 0.72, blue: 0.94),
+                halo: Color(red: 0.83, green: 0.66, blue: 0.98),
+                ripple: Color(red: 0.98, green: 0.67, blue: 0.50),
+                mistA: Color(red: 0.99, green: 0.73, blue: 0.58),
+                mistB: Color(red: 0.42, green: 0.78, blue: 0.98)
+            )
+        case "echo":
+            return palette(
+                center: Color(red: 0.93, green: 0.99, blue: 0.99),
+                secondary: Color(red: 0.74, green: 0.94, blue: 0.98),
+                accent: Color(red: 0.24, green: 0.76, blue: 0.87),
+                edge: Color(red: 0.36, green: 0.58, blue: 0.95),
+                halo: Color(red: 0.44, green: 0.83, blue: 0.93),
+                ripple: Color(red: 0.62, green: 0.95, blue: 0.98),
+                mistA: Color(red: 0.62, green: 0.94, blue: 0.97),
+                mistB: Color(red: 0.43, green: 0.66, blue: 0.96)
+            )
+        case "fable":
+            return palette(
+                center: Color(red: 0.95, green: 0.95, blue: 1.0),
+                secondary: Color(red: 0.76, green: 0.84, blue: 0.99),
+                accent: Color(red: 0.32, green: 0.50, blue: 0.96),
+                edge: Color(red: 0.70, green: 0.47, blue: 0.93),
+                halo: Color(red: 0.46, green: 0.64, blue: 1.0),
+                ripple: Color(red: 0.66, green: 0.79, blue: 1.0),
+                mistA: Color(red: 0.66, green: 0.82, blue: 1.0),
+                mistB: Color(red: 0.70, green: 0.53, blue: 0.96)
+            )
+        case "onyx":
+            return palette(
+                center: Color(red: 0.92, green: 0.96, blue: 1.0),
+                secondary: Color(red: 0.66, green: 0.79, blue: 0.98),
+                accent: Color(red: 0.20, green: 0.43, blue: 0.95),
+                edge: Color(red: 0.44, green: 0.56, blue: 0.93),
+                halo: Color(red: 0.29, green: 0.56, blue: 0.97),
+                ripple: Color(red: 0.51, green: 0.72, blue: 0.99),
+                mistA: Color(red: 0.49, green: 0.73, blue: 0.98),
+                mistB: Color(red: 0.44, green: 0.58, blue: 0.92)
+            )
+        case "nova":
+            return palette(
+                center: Color(red: 0.93, green: 1.0, blue: 1.0),
+                secondary: Color(red: 0.71, green: 0.96, blue: 1.0),
+                accent: Color(red: 0.21, green: 0.76, blue: 1.0),
+                edge: Color(red: 0.41, green: 0.56, blue: 0.98),
+                halo: Color(red: 0.26, green: 0.86, blue: 0.99),
+                ripple: Color(red: 0.61, green: 0.96, blue: 1.0),
+                mistA: Color(red: 0.58, green: 0.95, blue: 1.0),
+                mistB: Color(red: 0.49, green: 0.67, blue: 0.98)
+            )
+        case "sage":
+            return palette(
+                center: Color(red: 0.94, green: 1.0, blue: 0.97),
+                secondary: Color(red: 0.76, green: 0.96, blue: 0.88),
+                accent: Color(red: 0.35, green: 0.78, blue: 0.67),
+                edge: Color(red: 0.35, green: 0.63, blue: 0.93),
+                halo: Color(red: 0.48, green: 0.85, blue: 0.77),
+                ripple: Color(red: 0.69, green: 0.97, blue: 0.84),
+                mistA: Color(red: 0.66, green: 0.95, blue: 0.82),
+                mistB: Color(red: 0.47, green: 0.70, blue: 0.95)
+            )
+        case "shimmer":
+            return palette(
+                center: Color(red: 0.99, green: 0.96, blue: 1.0),
+                secondary: Color(red: 0.86, green: 0.81, blue: 0.99),
+                accent: Color(red: 0.63, green: 0.59, blue: 0.98),
+                edge: Color(red: 0.90, green: 0.55, blue: 0.95),
+                halo: Color(red: 0.75, green: 0.65, blue: 1.0),
+                ripple: Color(red: 0.91, green: 0.74, blue: 0.99),
+                mistA: Color(red: 0.88, green: 0.74, blue: 1.0),
+                mistB: Color(red: 0.88, green: 0.62, blue: 0.97)
+            )
+        case "kore":
+            return palette(
+                center: Color(red: 0.94, green: 0.98, blue: 1.0),
+                secondary: Color(red: 0.74, green: 0.88, blue: 0.99),
+                accent: Color(red: 0.33, green: 0.61, blue: 0.98),
+                edge: Color(red: 0.45, green: 0.66, blue: 0.96),
+                halo: Color(red: 0.41, green: 0.74, blue: 1.0),
+                ripple: Color(red: 0.65, green: 0.87, blue: 0.99),
+                mistA: Color(red: 0.67, green: 0.87, blue: 1.0),
+                mistB: Color(red: 0.57, green: 0.72, blue: 0.98)
+            )
+        case "puck":
+            return palette(
+                center: Color(red: 0.95, green: 1.0, blue: 0.96),
+                secondary: Color(red: 0.74, green: 0.98, blue: 0.89),
+                accent: Color(red: 0.31, green: 0.83, blue: 0.62),
+                edge: Color(red: 0.32, green: 0.66, blue: 0.93),
+                halo: Color(red: 0.46, green: 0.90, blue: 0.76),
+                ripple: Color(red: 0.67, green: 0.99, blue: 0.87),
+                mistA: Color(red: 0.64, green: 0.98, blue: 0.84),
+                mistB: Color(red: 0.43, green: 0.73, blue: 0.95)
+            )
+        case "aoede":
+            return palette(
+                center: Color(red: 0.98, green: 0.95, blue: 1.0),
+                secondary: Color(red: 0.82, green: 0.78, blue: 0.99),
+                accent: Color(red: 0.58, green: 0.52, blue: 0.97),
+                edge: Color(red: 0.76, green: 0.49, blue: 0.96),
+                halo: Color(red: 0.67, green: 0.60, blue: 1.0),
+                ripple: Color(red: 0.84, green: 0.72, blue: 0.99),
+                mistA: Color(red: 0.81, green: 0.71, blue: 1.0),
+                mistB: Color(red: 0.78, green: 0.58, blue: 0.97)
+            )
+        case "leda":
+            return palette(
+                center: Color(red: 1.0, green: 0.96, blue: 0.92),
+                secondary: Color(red: 0.99, green: 0.85, blue: 0.74),
+                accent: Color(red: 0.98, green: 0.60, blue: 0.41),
+                edge: Color(red: 0.82, green: 0.53, blue: 0.92),
+                halo: Color(red: 0.98, green: 0.71, blue: 0.53),
+                ripple: Color(red: 1.0, green: 0.80, blue: 0.63),
+                mistA: Color(red: 1.0, green: 0.82, blue: 0.66),
+                mistB: Color(red: 0.86, green: 0.60, blue: 0.94)
+            )
+        case "orus":
+            return palette(
+                center: Color(red: 1.0, green: 0.97, blue: 0.89),
+                secondary: Color(red: 0.99, green: 0.86, blue: 0.59),
+                accent: Color(red: 0.98, green: 0.66, blue: 0.25),
+                edge: Color(red: 0.47, green: 0.57, blue: 0.94),
+                halo: Color(red: 0.99, green: 0.76, blue: 0.38),
+                ripple: Color(red: 1.0, green: 0.85, blue: 0.53),
+                mistA: Color(red: 1.0, green: 0.83, blue: 0.52),
+                mistB: Color(red: 0.57, green: 0.66, blue: 0.96)
+            )
+        case "zephyr":
+            return palette(
+                center: Color(red: 0.94, green: 0.99, blue: 1.0),
+                secondary: Color(red: 0.72, green: 0.90, blue: 0.99),
+                accent: Color(red: 0.28, green: 0.70, blue: 0.96),
+                edge: Color(red: 0.44, green: 0.58, blue: 0.96),
+                halo: Color(red: 0.46, green: 0.80, blue: 1.0),
+                ripple: Color(red: 0.66, green: 0.92, blue: 0.99),
+                mistA: Color(red: 0.64, green: 0.90, blue: 1.0),
+                mistB: Color(red: 0.53, green: 0.68, blue: 0.97)
+            )
+        default:
+            return generatedPalette(seedText: normalized)
+        }
+    }
+
+    private static func generatedPalette(seedText: String) -> VoiceOrbPalette {
+        let base = stableSeed(for: seedText)
+        let secondary = stableSeed(for: "\(seedText)-secondary")
+        let baseHue = wrapHue(base)
+        let accentHue = wrapHue(baseHue + 0.11 + (secondary * 0.21))
+        let edgeHue = wrapHue(accentHue + 0.17)
+        let haloHue = wrapHue(baseHue + 0.31)
+
+        return palette(
+            center: Color(hue: wrapHue(baseHue + 0.02), saturation: 0.13, brightness: 0.99, opacity: 1),
+            secondary: Color(hue: wrapHue(baseHue + 0.03), saturation: 0.39, brightness: 0.96, opacity: 1),
+            accent: Color(hue: accentHue, saturation: 0.75, brightness: 0.93, opacity: 1),
+            edge: Color(hue: edgeHue, saturation: 0.66, brightness: 0.86, opacity: 1),
+            halo: Color(hue: haloHue, saturation: 0.73, brightness: 0.90, opacity: 1),
+            ripple: Color(hue: wrapHue(accentHue + 0.05), saturation: 0.80, brightness: 0.95, opacity: 1),
+            mistA: Color(hue: wrapHue(baseHue + 0.09), saturation: 0.56, brightness: 0.98, opacity: 1),
+            mistB: Color(hue: wrapHue(baseHue + 0.27), saturation: 0.61, brightness: 0.93, opacity: 1)
+        )
+    }
+
+    private static func palette(
+        center: Color,
+        secondary: Color,
+        accent: Color,
+        edge: Color,
+        halo: Color,
+        ripple: Color,
+        mistA: Color,
+        mistB: Color
+    ) -> VoiceOrbPalette {
+        VoiceOrbPalette(
+            coreCenter: center,
+            coreSecondary: secondary,
+            coreAccent: accent,
+            edgeTone: edge,
+            haloTone: halo,
+            rippleTone: ripple,
+            mistPrimary: mistA,
+            mistSecondary: mistB
+        )
+    }
+
+    private static func stableSeed(for text: String) -> Double {
+        var hash: UInt64 = 1469598103934665603
+        for byte in text.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1099511628211
+        }
+        return Double(hash % 10_000) / 10_000.0
+    }
+
+    private static func wrapHue(_ value: Double) -> Double {
+        let wrapped = value.truncatingRemainder(dividingBy: 1)
+        return wrapped < 0 ? wrapped + 1 : wrapped
+    }
+}
+
 private struct AtmosphericVoiceOrb: View {
     let activityLevel: Double
     let isActive: Bool
+    let palette: VoiceOrbPalette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -1218,8 +1525,8 @@ private struct AtmosphericVoiceOrb: View {
                     .fill(
                         RadialGradient(
                             colors: [
-                                Color(red: 0.31, green: 0.52, blue: 0.99).opacity(0.55),
-                                Color(red: 0.25, green: 0.78, blue: 1.0).opacity(0.20),
+                                palette.haloTone.opacity(0.55),
+                                palette.coreAccent.opacity(0.24),
                                 .clear
                             ],
                             center: .center,
@@ -1234,11 +1541,11 @@ private struct AtmosphericVoiceOrb: View {
                     .fill(
                         RadialGradient(
                             stops: [
-                                .init(color: Color(red: 0.95, green: 0.98, blue: 1).opacity(0.92), location: 0),
-                                .init(color: Color(red: 0.72, green: 0.90, blue: 1).opacity(0.88), location: 0.30),
-                                .init(color: Color(red: 0.24, green: 0.57, blue: 1).opacity(0.92), location: 0.58),
-                                .init(color: Color(red: 0.55, green: 0.50, blue: 1).opacity(0.84), location: 0.80),
-                                .init(color: Color(red: 0.78, green: 0.45, blue: 0.97).opacity(0.66), location: 1)
+                                .init(color: palette.coreCenter.opacity(0.93), location: 0),
+                                .init(color: palette.coreSecondary.opacity(0.88), location: 0.30),
+                                .init(color: palette.coreAccent.opacity(0.91), location: 0.58),
+                                .init(color: palette.edgeTone.opacity(0.85), location: 0.80),
+                                .init(color: palette.haloTone.opacity(0.66), location: 1)
                             ],
                             center: UnitPoint(
                                 x: CGFloat(0.46 + (0.08 * sin(phase * 0.22))),
@@ -1253,8 +1560,8 @@ private struct AtmosphericVoiceOrb: View {
                             .fill(
                                 RadialGradient(
                                     colors: [
-                                        Color.white.opacity(0.24),
-                                        Color(red: 0.73, green: 0.90, blue: 1).opacity(0.10),
+                                        palette.coreCenter.opacity(0.25),
+                                        palette.coreSecondary.opacity(0.12),
                                         .clear
                                     ],
                                     center: .topLeading,
@@ -1265,7 +1572,11 @@ private struct AtmosphericVoiceOrb: View {
                             .blur(radius: 9)
                     )
                     .overlay(
-                        OrbWaveInterference(phase: phase, activityLevel: clampedActivity)
+                        OrbWaveInterference(
+                            phase: phase,
+                            activityLevel: clampedActivity,
+                            palette: palette
+                        )
                             .clipShape(Circle())
                     )
                     .overlay(
@@ -1275,11 +1586,11 @@ private struct AtmosphericVoiceOrb: View {
                     )
                     .overlay(
                         Circle()
-                            .strokeBorder(Color.white.opacity(0.17), lineWidth: 1)
+                            .strokeBorder(palette.edgeTone.opacity(0.26), lineWidth: 1)
                     )
-                    .shadow(color: Color(red: 0.20, green: 0.64, blue: 1).opacity(0.32), radius: 30)
+                    .shadow(color: palette.haloTone.opacity(0.34), radius: 30)
 
-                OrbParticleMist(phase: phase, activityLevel: clampedActivity)
+                OrbParticleMist(phase: phase, activityLevel: clampedActivity, palette: palette)
             }
             .frame(width: 360, height: 360)
             .compositingGroup()
@@ -1292,6 +1603,7 @@ private struct AtmosphericVoiceOrb: View {
 private struct OrbWaveInterference: View {
     let phase: Double
     let activityLevel: Double
+    let palette: VoiceOrbPalette
 
     var body: some View {
         Canvas { context, size in
@@ -1323,8 +1635,8 @@ private struct OrbWaveInterference: View {
 
             var glowContext = context
             glowContext.addFilter(.blur(radius: 2.2))
-            glowContext.stroke(path, with: .color(Color(red: 0.70, green: 0.88, blue: 1).opacity(0.34)), lineWidth: 3)
-            context.stroke(path, with: .color(Color.white.opacity(0.36)), lineWidth: 1.15)
+            glowContext.stroke(path, with: .color(palette.rippleTone.opacity(0.36)), lineWidth: 3)
+            context.stroke(path, with: .color(palette.coreCenter.opacity(0.34)), lineWidth: 1.15)
         }
     }
 }
@@ -1350,6 +1662,7 @@ private struct OrbNoiseTexture: View {
 private struct OrbParticleMist: View {
     let phase: Double
     let activityLevel: Double
+    let palette: VoiceOrbPalette
 
     var body: some View {
         GeometryReader { proxy in
@@ -1371,8 +1684,8 @@ private struct OrbParticleMist: View {
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    Color(red: 0.74, green: 0.90, blue: 1).opacity(opacity),
-                                    Color(red: 0.63, green: 0.55, blue: 0.98).opacity(opacity * 0.55)
+                                    palette.mistPrimary.opacity(opacity),
+                                    palette.mistSecondary.opacity(opacity * 0.55)
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -1389,22 +1702,34 @@ private struct OrbParticleMist: View {
 }
 
 private struct OrbDirectionButtonStyle: ButtonStyle {
+    let accentColor: Color
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(FloTheme.textPrimary)
             .background(
                 Circle()
-                    .fill(Color.white.opacity(configuration.isPressed ? 0.15 : 0.09))
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                accentColor.opacity(configuration.isPressed ? 0.22 : 0.14),
+                                Color.white.opacity(configuration.isPressed ? 0.12 : 0.07)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
             )
             .overlay(
                 Circle()
-                    .strokeBorder(Color.white.opacity(0.13), lineWidth: 1)
+                    .strokeBorder(accentColor.opacity(0.32), lineWidth: 1)
             )
     }
 }
 
 private struct VoiceChipButtonStyle: ButtonStyle {
     let isSelected: Bool
+    let accentColor: Color
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -1414,11 +1739,11 @@ private struct VoiceChipButtonStyle: ButtonStyle {
             .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isSelected ? FloTheme.accent.opacity(configuration.isPressed ? 0.22 : 0.30) : Color.white.opacity(0.06))
+                    .fill(isSelected ? accentColor.opacity(configuration.isPressed ? 0.24 : 0.32) : Color.white.opacity(0.06))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(isSelected ? FloTheme.accent.opacity(0.45) : Color.white.opacity(0.12), lineWidth: 1)
+                    .strokeBorder(isSelected ? accentColor.opacity(0.52) : Color.white.opacity(0.12), lineWidth: 1)
             )
     }
 }
