@@ -154,7 +154,7 @@ public struct FloConfiguration: Sendable {
         case .gemini:
             defaultTranscriptionModel = "gemini-3-flash-preview"
             defaultTTSModel = "gemini-2.5-flash-preview-tts"
-            defaultRewriteModel = "gemini-2.5-flash"
+            defaultRewriteModel = "gemini-2.0-flash"
             let geminiTranscriptionModel = nonEmpty(env["FLO_TRANSCRIPTION_MODEL"]) ??
                 nonEmpty(env["FLO_GEMINI_TRANSCRIPTION_MODEL"]) ??
                 defaultTranscriptionModel
@@ -200,7 +200,7 @@ public struct FloConfiguration: Sendable {
             case .openai:
                 return nonEmpty(env["FLO_OPENAI_REWRITE_MODEL"]) ?? "gpt-4o-mini"
             case .gemini:
-                return nonEmpty(env["FLO_GEMINI_REWRITE_MODEL"]) ?? "gemini-2.5-flash"
+                return nonEmpty(env["FLO_GEMINI_REWRITE_MODEL"]) ?? "gemini-2.0-flash"
             }
         }()
         let ttsVoice = nonEmpty(env["FLO_TTS_VOICE"]) ?? {
