@@ -67,7 +67,7 @@ private struct StatusBarMenuContent: View {
 
         Divider()
 
-        Button("Shortcuts") {
+        Button("Hotkeys") {
             openApp(.shortcuts)
         }
 
@@ -154,6 +154,7 @@ private enum AppFlowStage: Int, CaseIterable {
     case login
     case permissions
     case settings
+    case hotkeys
     case history
     case voice
 
@@ -165,6 +166,8 @@ private enum AppFlowStage: Int, CaseIterable {
             return "Permissions"
         case .settings:
             return "Settings"
+        case .hotkeys:
+            return "Hotkeys"
         case .history:
             return "History"
         case .voice:
@@ -179,7 +182,9 @@ private enum AppFlowStage: Int, CaseIterable {
         case .permissions:
             return "System permission management"
         case .settings:
-            return "Shortcuts, dictation, and system controls"
+            return "Providers, dictation, and system controls"
+        case .hotkeys:
+            return "Shortcut bindings and keyboard controls"
         case .history:
             return "Session events and recent activity"
         case .voice:
@@ -195,6 +200,8 @@ private enum AppFlowStage: Int, CaseIterable {
             return "checkmark.shield"
         case .settings:
             return "switch.2"
+        case .hotkeys:
+            return "keyboard"
         case .history:
             return "clock.arrow.circlepath"
         case .voice:
@@ -242,7 +249,7 @@ private struct RootView: View {
             return [.login]
         case .permissions:
             return [.login, .permissions]
-        case .settings, .history, .voice:
+        case .settings, .hotkeys, .history, .voice:
             return Set(AppFlowStage.allCases)
         }
     }
@@ -312,8 +319,8 @@ private struct RootView: View {
             settingsSearchQuery = ""
             selectedStage = currentStage
         case .shortcuts:
-            settingsSearchQuery = "shortcut"
-            selectedStage = .settings
+            settingsSearchQuery = ""
+            selectedStage = .hotkeys
         case .permissions:
             settingsSearchQuery = ""
             selectedStage = .permissions
@@ -640,6 +647,8 @@ private struct WorkspaceSurface: View {
                             PermissionStageView(controller: controller)
                         case .settings:
                             SettingsStageView(controller: controller, searchQuery: $settingsSearchQuery)
+                        case .hotkeys:
+                            HotkeysStageView(controller: controller)
                         case .history:
                             HistoryStageView(controller: controller)
                         case .voice:
@@ -903,7 +912,7 @@ private struct SettingsStageView: View {
                         Text("Workspace Settings")
                             .font(.system(size: 24, weight: .semibold))
                             .foregroundStyle(FloTheme.textPrimary)
-                        Text("Tune shortcuts, voice output, and core system controls.")
+                        Text("Tune providers, dictation behavior, and core system controls.")
                             .foregroundStyle(FloTheme.textSecondary)
                     }
 
@@ -923,26 +932,6 @@ private struct SettingsStageView: View {
                 InlineNotice(text: statusMessage, tone: .info)
             }
 
-            if showOnboardingCard {
-                CardContainer {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Confirm Hotkey Setup")
-                            .font(.headline)
-                            .foregroundStyle(FloTheme.textPrimary)
-
-                        Text("Review your hotkeys once, then mark setup as complete.")
-                            .font(.subheadline)
-                            .foregroundStyle(FloTheme.textSecondary)
-
-                        Button("Confirm hotkeys") {
-                            controller.completeHotkeyConfirmation()
-                        }
-                        .buttonStyle(SecondaryActionButtonStyle())
-                        .accessibilityLabel("Confirm hotkeys")
-                    }
-                }
-            }
-
             LazyVGrid(
                 columns: [GridItem(.adaptive(minimum: 360), spacing: 16, alignment: .top)],
                 alignment: .leading,
@@ -953,11 +942,6 @@ private struct SettingsStageView: View {
                         ProviderConfigurationSection(controller: controller)
                     }
                 }
-                if showHotkeysSection {
-                    CardContainer {
-                        ShortcutConfigurationSection(controller: controller)
-                    }
-                }
                 if showDictationSection {
                     CardContainer {
                         DictationStyleConfigurationSection(controller: controller)
@@ -966,24 +950,6 @@ private struct SettingsStageView: View {
                 if showSystemSection {
                     CardContainer {
                         UtilityActionsSection(controller: controller)
-                    }
-                }
-            }
-
-            if showPermissionsRedirectSection {
-                CardContainer {
-                    HStack(alignment: .center, spacing: 12) {
-                        Image(systemName: "hand.raised")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(FloTheme.accentSoft)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Permissions moved to Permissions tab")
-                                .font(.headline)
-                                .foregroundStyle(FloTheme.textPrimary)
-                            Text("Use the sidebar Permissions tab to grant microphone, accessibility, and input monitoring access.")
-                                .font(.subheadline)
-                                .foregroundStyle(FloTheme.textSecondary)
-                        }
                     }
                 }
             }
@@ -1005,42 +971,6 @@ private struct SettingsStageView: View {
                 }
             }
 
-            if showVoiceRedirectSection {
-                CardContainer {
-                    HStack(alignment: .center, spacing: 12) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(FloTheme.accentSoft)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Voice controls moved to Voice tab")
-                                .font(.headline)
-                                .foregroundStyle(FloTheme.textPrimary)
-                            Text("Use the sidebar Voice tab to switch voices with arrow controls and immersive live orb feedback.")
-                                .font(.subheadline)
-                                .foregroundStyle(FloTheme.textSecondary)
-                        }
-                    }
-                }
-            }
-
-            if showHistoryRedirectSection {
-                CardContainer {
-                    HStack(alignment: .center, spacing: 12) {
-                        Image(systemName: "clock.arrow.circlepath")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(FloTheme.accentSoft)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("History moved to History tab")
-                                .font(.headline)
-                                .foregroundStyle(FloTheme.textPrimary)
-                            Text("Use the sidebar History tab for recent activity, latency details, and history clearing.")
-                                .font(.subheadline)
-                                .foregroundStyle(FloTheme.textSecondary)
-                        }
-                    }
-                }
-            }
-
         }
     }
 
@@ -1058,10 +988,6 @@ private struct SettingsStageView: View {
         }
         let haystack = keywords.joined(separator: " ").lowercased()
         return searchTerms.allSatisfy { haystack.contains($0) }
-    }
-
-    private var showPermissionsRedirectSection: Bool {
-        matches(["permissions", "microphone", "accessibility", "input monitoring", "grant"])
     }
 
     private var showHotkeysSection: Bool {
@@ -1095,28 +1021,64 @@ private struct SettingsStageView: View {
         matches(["system", "live typing", "updates"])
     }
 
-    private var showVoiceRedirectSection: Bool {
-        matches(["voice", "audio", "preview", "speaker", "orb"])
-    }
-
-    private var showHistoryRedirectSection: Bool {
-        matches(["history", "activity", "latency", "request", "success", "failed"])
-    }
-
-    private var showOnboardingCard: Bool {
-        !controller.onboardingHotkeyConfirmed && matches(["hotkey", "onboarding", "confirm", "setup"])
-    }
-
     private var showEmptyState: Bool {
         !searchTerms.isEmpty &&
-            !showPermissionsRedirectSection &&
             !showProviderSection &&
             !showHotkeysSection &&
             !showDictationSection &&
-            !showSystemSection &&
-            !showVoiceRedirectSection &&
-            !showHistoryRedirectSection &&
-            !showOnboardingCard
+            !showSystemSection
+    }
+}
+
+private struct HotkeysStageView: View {
+    @ObservedObject var controller: FloController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            CardContainer {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Hotkey Controls")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(FloTheme.textPrimary)
+
+                    Text("Configure global shortcuts for dictation and read selected text actions.")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(FloTheme.textSecondary)
+
+                    Text("Hotkeys active: \(controller.hotkeysEnabled ? "Yes" : "No")")
+                        .font(.caption)
+                        .foregroundStyle(FloTheme.textSecondary)
+                }
+            }
+
+            if let statusMessage = controller.statusMessage {
+                InlineNotice(text: statusMessage, tone: .info)
+            }
+
+            if !controller.onboardingHotkeyConfirmed {
+                CardContainer {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Confirm Hotkey Setup")
+                            .font(.headline)
+                            .foregroundStyle(FloTheme.textPrimary)
+
+                        Text("Review your hotkeys once, then mark setup as complete.")
+                            .font(.subheadline)
+                            .foregroundStyle(FloTheme.textSecondary)
+
+                        Button("Confirm hotkeys") {
+                            controller.completeHotkeyConfirmation()
+                        }
+                        .buttonStyle(SecondaryActionButtonStyle())
+                        .accessibilityLabel("Confirm hotkeys")
+                    }
+                }
+            }
+
+            CardContainer {
+                ShortcutConfigurationSection(controller: controller)
+            }
+        }
     }
 }
 
