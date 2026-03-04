@@ -140,15 +140,27 @@ Direct download:
 
 - Download notarized artifacts from GitHub Releases.
 
-Homebrew cask (tap fallback path):
+Homebrew cask (this repository as your tap):
 
 ```bash
-# after publishing AbhiShake1/homebrew-flo
-brew tap AbhiShake1/flo
+# one-time
+brew tap AbhiShake1/flo https://github.com/AbhiShake1/flo
+
+# install
 brew install --cask flo
+
+# future updates
+brew upgrade --cask flo
+
+# optional cleanup
+brew uninstall --cask flo
+brew untap AbhiShake1/flo
 ```
 
-Official `homebrew/cask` submission is attempted first. If unavailable, publish the fallback tap cask from `Casks/flo.rb` and then use the command above.
+`brew upgrade --cask flo` picks up new versions after the automated cask bump PR
+from the release workflow is merged into `main`.
+For first-time setup, create and push your first release tag, then merge the
+automated cask bump PR before running `brew install --cask flo`.
 
 ## Release
 
@@ -163,3 +175,16 @@ FLO_APPLE_APP_SPECIFIC_PASSWORD=<app-specific-password> \
 FLO_DEVELOPER_IDENTITY="<Developer ID Application: ...>" \
 ./scripts/notarize_release.sh
 ```
+
+Publish a release with CI:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+This triggers `.github/workflows/release.yml`, which:
+
+1. Runs tests and builds notarized release artifacts.
+2. Publishes the GitHub Release.
+3. Opens an automated PR that updates `Casks/flo.rb` with the release version and DMG checksum.

@@ -35,7 +35,14 @@
 
 1. Push tag `v<version>` to trigger `.github/workflows/release.yml`.
 2. Confirm GitHub Release includes DMG and checksum artifacts.
-3. Publish release notes with known risks and rollback plan.
-4. Submit/update Homebrew cask and validate:
-   - `brew audit --cask --strict`
-5. Archive notarization logs and signing metadata.
+3. Confirm the automated Homebrew cask bump PR is created and targets `main`.
+4. Validate the PR cask changes:
+   - `HOMEBREW_NO_AUTO_UPDATE=1 brew tap-new local/flo-ci`
+   - `mkdir -p "$(brew --repository local/flo-ci)/Casks"`
+   - `cp Casks/flo.rb "$(brew --repository local/flo-ci)/Casks/flo.rb"`
+   - `HOMEBREW_NO_AUTO_UPDATE=1 brew audit --cask --strict --tap local/flo-ci flo`
+   - `HOMEBREW_NO_AUTO_UPDATE=1 brew untap local/flo-ci`
+5. Merge the cask bump PR so users can run:
+   - `brew upgrade --cask flo`
+6. Publish release notes with known risks and rollback plan.
+7. Archive notarization logs and signing metadata.

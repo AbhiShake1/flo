@@ -7,11 +7,15 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   release:
     name: release
     runs-on: macos-15
+    outputs:
+      version: ${{ steps.release_meta.outputs.version }}
+      dmg_sha256: ${{ steps.release_meta.outputs.dmg_sha256 }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -41,7 +45,8 @@ jobs:
           export FLO_RELEASE_VERSION="$VERSION"
           ./scripts/notarize_release.sh
 
-      - name: Validate artifact naming
+      - name: Validate artifact naming and capture metadata
+        id: release_meta
         env:
           FLO_RELEASE_VERSION: ${{ github.ref_name }}
           FLO_OUTPUT_DIR: ${{ github.workspace }}/.artifacts/release
@@ -57,9 +62,65 @@ jobs:
 
           grep -q "$DMG" "$FLO_OUTPUT_DIR/$SHA_FILE"
 
+          DMG_SHA="$(awk '{ print $1 }' "$FLO_OUTPUT_DIR/$SHA_FILE")"
+          [[ "$DMG_SHA" =~ ^[0-9a-f]{64}$ ]]
+
+          {
+            echo "version=$VERSION"
+            echo "dmg_sha256=$DMG_SHA"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
             .artifacts/release/*
+
+  update-homebrew-cask:
+    name: update-homebrew-cask
+    needs: release
+    runs-on: macos-15
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: Update cask version and checksum
+        run: |
+          set -euo pipefail
+          ./scripts/update_cask.sh "${{ needs.release.outputs.version }}" "${{ needs.release.outputs.dmg_sha256 }}"
+
+      - name: Validate updated cask
+        run: |
+          set -euo pipefail
+
+          TAP_NAME="local/flo-ci"
+          trap 'HOMEBREW_NO_AUTO_UPDATE=1 brew untap "$TAP_NAME" >/dev/null 2>&1 || true' EXIT
+
+          HOMEBREW_NO_AUTO_UPDATE=1 brew untap "$TAP_NAME" >/dev/null 2>&1 || true
+          HOMEBREW_NO_AUTO_UPDATE=1 brew tap-new "$TAP_NAME" >/dev/null
+
+          TAP_DIR="$(brew --repository "$TAP_NAME")"
+          mkdir -p "$TAP_DIR/Casks"
+          cp Casks/flo.rb "$TAP_DIR/Casks/flo.rb"
+
+          HOMEBREW_NO_AUTO_UPDATE=1 brew audit --cask --strict --tap "$TAP_NAME" flo
+
+      - name: Create cask bump pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: "chore/homebrew-cask-v${{ needs.release.outputs.version }}"
+          delete-branch: true
+          title: "chore(cask): bump flo to v${{ needs.release.outputs.version }}"
+          commit-message: "chore(cask): bump flo to v${{ needs.release.outputs.version }}"
+          body: |
+            ## Summary
+            - bump `Casks/flo.rb` to `v${{ needs.release.outputs.version }}`
+            - update SHA256 to match `FloApp-${{ needs.release.outputs.version }}-arm64.dmg`
+
+            Generated automatically by `.github/workflows/release.yml`.
+          labels: |
+            release
+            homebrew

@@ -2111,7 +2111,7 @@ public final class FloController: ObservableObject {
     }
 
     private func configureFloatingBarActions() {
-        let dictationHint = "Hold \(shortcutDisplay(for: .dictationHold)) to start dictating, or click to toggle."
+        let dictationHint = "Hold \(shortcutDisplay(for: .dictationHold)) to start dictating, or click to start or stop dictation."
         let readHint = "Press \(shortcutDisplay(for: .readSelectedText)) or click to narrate selected text."
         environment.floatingBarManager.setActions(
             FloatingBarActions(

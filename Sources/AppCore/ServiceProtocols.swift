@@ -159,7 +159,7 @@ public struct FloatingBarActions {
         toggleDictation: @escaping () -> Void,
         triggerReadSelected: @escaping () -> Void,
         openMainWindow: @escaping () -> Void,
-        dictationHint: String = "Hold your dictation shortcut to start dictating, or click to toggle.",
+        dictationHint: String = "Hold your dictation shortcut to start dictating, or click to start or stop dictation.",
         readSelectedHint: String = "Read selected text aloud."
     ) {
         self.toggleDictation = toggleDictation
