@@ -171,6 +171,63 @@ struct FloControllerTests {
 
     @Test
     @MainActor
+    func reorderProviderCredentialsPersistsCustomOrder() async {
+        let configuration = makeConfiguration(oauth: nil, provider: .gemini, geminiApiKey: nil)
+        let dependencies = TestDependencies(configuration: configuration)
+        dependencies.providerCredentialStore.credentialPools["gemini"] = [
+            "gemini_saved_1",
+            "gemini_saved_2",
+            "gemini_saved_3"
+        ]
+        let controller = FloController(environment: dependencies.environment)
+
+        await controller.bootstrap()
+        controller.reorderProviderCredentials(
+            ["gemini_saved_3", "gemini_saved_1", "gemini_saved_2"],
+            for: .gemini
+        )
+
+        #expect(dependencies.providerCredentialStore.credentialPools["gemini"] == [
+            "gemini_saved_3",
+            "gemini_saved_1",
+            "gemini_saved_2"
+        ])
+        #expect(controller.statusMessage == "Updated Gemini API key order.")
+    }
+
+    @Test
+    @MainActor
+    func reorderProviderCredentialsKeepsPerCredentialModelOverridesBoundToKeys() async {
+        let configuration = makeConfiguration(oauth: nil, provider: .gemini, geminiApiKey: nil)
+        let dependencies = TestDependencies(configuration: configuration)
+        dependencies.providerCredentialStore.credentialPools["gemini"] = [
+            "gemini_saved_1",
+            "gemini_saved_2",
+            "gemini_saved_3"
+        ]
+        let controller = FloController(environment: dependencies.environment)
+
+        await controller.bootstrap()
+        controller.setRewriteModel("models/gemini-2.5-flash", for: .gemini, credentialIndex: 0)
+        controller.setRewriteModel("models/gemini-2.5-pro", for: .gemini, credentialIndex: 2)
+
+        controller.reorderProviderCredentials(
+            ["gemini_saved_3", "gemini_saved_2", "gemini_saved_1"],
+            for: .gemini
+        )
+
+        #expect(controller.rewriteModelOverride(for: .gemini, credentialIndex: 0) == "models/gemini-2.5-pro")
+        #expect(controller.rewriteModelOverride(for: .gemini, credentialIndex: 2) == "models/gemini-2.5-flash")
+        #expect(
+            dependencies.providerRoutingStore.overrides.rewriteModelsByProviderCredentialIndex?["gemini"] == [
+                "0": "models/gemini-2.5-pro",
+                "2": "models/gemini-2.5-flash"
+            ]
+        )
+    }
+
+    @Test
+    @MainActor
     func copyProviderCredentialCopiesSelectedIndexToClipboard() async {
         let configuration = makeConfiguration(oauth: nil, provider: .gemini, geminiApiKey: nil)
         let dependencies = TestDependencies(configuration: configuration)

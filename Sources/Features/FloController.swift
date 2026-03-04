@@ -435,6 +435,40 @@ public final class FloController: ObservableObject {
         )
     }
 
+    public func reorderProviderCredentials(_ credentials: [String], for provider: AIProvider) {
+        let existing = savedCredentialTokens(for: provider)
+        guard existing.count > 1 else {
+            return
+        }
+
+        let allowed = Set(existing)
+        var seen = Set<String>()
+        var reordered: [String] = []
+        reordered.reserveCapacity(existing.count)
+
+        for credential in credentials {
+            let normalized = credential.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard allowed.contains(normalized), seen.insert(normalized).inserted else {
+                continue
+            }
+            reordered.append(normalized)
+        }
+
+        for credential in existing where seen.insert(credential).inserted {
+            reordered.append(credential)
+        }
+
+        guard reordered != existing else {
+            return
+        }
+
+        saveProviderCredentialPool(
+            reordered,
+            for: provider,
+            successMessage: "Updated \(provider.displayName) API key order."
+        )
+    }
+
     public func providerSupportsFailoverOperation(_ provider: AIProvider) -> Bool {
         effectiveConfiguration.supportsTranscription(for: provider)
             || effectiveConfiguration.supportsTTS(for: provider)
