@@ -145,7 +145,12 @@ public protocol FloatingBarManaging: AnyObject {
     @MainActor func show(state: RecorderState)
     @MainActor func update(state: RecorderState)
     @MainActor func updateAudioLevel(_ level: Float)
+    @MainActor func showBanner(message: String, kind: FloatingBarBannerKind)
     @MainActor func hide()
+}
+
+public enum FloatingBarBannerKind: Sendable {
+    case success
 }
 
 public struct FloatingBarActions {
@@ -173,6 +178,7 @@ public struct FloatingBarActions {
 public extension FloatingBarManaging {
     @MainActor func setActions(_ actions: FloatingBarActions?) {}
     @MainActor func updateAudioLevel(_ level: Float) {}
+    @MainActor func showBanner(message: String, kind: FloatingBarBannerKind) {}
 }
 
 public extension SpeechCaptureService {

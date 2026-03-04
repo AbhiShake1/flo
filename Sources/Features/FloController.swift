@@ -1410,6 +1410,9 @@ public final class FloController: ObservableObject {
                 ? "\(errorMessage) Last transcript copied to clipboard."
                 : "\(errorMessage) Could not copy last transcript to clipboard."
             environment.logger.error("Paste last transcript failed: \(errorMessage)")
+            if copied {
+                environment.floatingBarManager.showBanner(message: "Last transcript copied to clipboard.", kind: .success)
+            }
         }
     }
 
@@ -1746,10 +1749,7 @@ public final class FloController: ObservableObject {
             }
             transcribedText = finalizedText
 
-            let copiedForRecovery = copyToClipboard(finalizedText)
-            if !copiedForRecovery {
-                environment.logger.error("Could not copy transcript to clipboard before injection.")
-            }
+            var copiedForRecovery = false
 
             var textToInject = finalizedText
             var shouldReplaceLiveText = false
@@ -1761,8 +1761,10 @@ public final class FloController: ObservableObject {
                         textToInject = String(finalizedText.dropFirst(liveInjectedTranscript.count))
                     } else {
                         textToInject = ""
-                        liveReconciliationNotice =
-                            "Live transcript differed from final model output. Final transcript copied to clipboard."
+                        copiedForRecovery = copyToClipboard(finalizedText)
+                        liveReconciliationNotice = copiedForRecovery
+                            ? "Live transcript differed from final model output. Final transcript copied to clipboard."
+                            : "Live transcript differed from final model output. Could not copy final transcript to clipboard."
                     }
                 case .replaceWithFinal:
                     shouldReplaceLiveText = true
@@ -1824,6 +1826,9 @@ public final class FloController: ObservableObject {
                 statusMessage = fallbackMessage
                 environment.logger.error("Injection failed: \(errorMessage)")
                 setRecorderState(.idle)
+                if copied {
+                    environment.floatingBarManager.showBanner(message: "Transcript copied to clipboard.", kind: .success)
+                }
                 return
             }
 
@@ -1840,15 +1845,11 @@ public final class FloController: ObservableObject {
             appendHistoryBestEffort(entry)
 
             let confidenceSuffix = transcriptConfidence.map { " (confidence: \(String(format: "%.2f", $0)))" } ?? ""
-            let clipboardRecovered = copiedForRecovery || copyToClipboard(finalizedText)
-            let clipboardSuffix = clipboardRecovered
-                ? " Transcript copied to clipboard."
-                : " Could not copy transcript to clipboard."
             let liveSuffix = liveReconciliationNotice.map { " \($0)" } ?? ""
             let rewriteSuffix = rewriteStatusNotice.map { " \($0)" } ?? ""
             let fallbackSuffix = transcriptionFallbackNotice.map { " \($0)" } ?? ""
             let baseMessage = liveDictationEnabled ? "Live dictation completed." : "Dictation inserted."
-            statusMessage = "\(baseMessage)\(confidenceSuffix)\(clipboardSuffix)\(rewriteSuffix)\(liveSuffix)\(fallbackSuffix)"
+            statusMessage = "\(baseMessage)\(confidenceSuffix)\(rewriteSuffix)\(liveSuffix)\(fallbackSuffix)"
             setRecorderState(.idle)
         } catch {
             if let transcribedText {
@@ -1872,6 +1873,9 @@ public final class FloController: ObservableObject {
                 statusMessage = fallbackMessage
                 environment.logger.error("Dictation failed after transcription: \(errorMessage)")
                 setRecorderState(.idle)
+                if copied {
+                    environment.floatingBarManager.showBanner(message: "Transcript copied to clipboard.", kind: .success)
+                }
                 return
             }
             transitionToError(localizedMessage(for: error), kind: .dictation, inputText: "")

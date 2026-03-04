@@ -564,6 +564,8 @@ struct FloControllerTests {
     @Test
     @MainActor
     func dictationInjectionFailureFallsBackToClipboardMessage() async {
+        setSystemClipboardText("seed")
+
         let dependencies = TestDependencies(configuration: makeConfiguration(oauth: sampleOAuthConfiguration()))
         dependencies.authService.restoredSession = sampleSession()
         dependencies.textInjectionService.error = FloError.injectionFailed
@@ -574,11 +576,12 @@ struct FloControllerTests {
         await controller.stopDictationFromHotkey()
 
         #expect(controller.statusMessage?.contains("Could not inject into focused app.") == true)
+        #expect(dependencies.floatingBarManager.bannerCalls.last?.message == "Transcript copied to clipboard.")
     }
 
     @Test
     @MainActor
-    func dictationSuccessCopiesTranscriptToClipboardForRecovery() async {
+    func dictationSuccessDoesNotCopyTranscriptToClipboard() async {
         setSystemClipboardText("seed")
 
         let dependencies = TestDependencies(configuration: makeConfiguration(oauth: sampleOAuthConfiguration()))
@@ -589,8 +592,8 @@ struct FloControllerTests {
         await controller.startDictationFromHotkey()
         await controller.stopDictationFromHotkey()
 
-        #expect(controller.statusMessage?.contains("Transcript copied to clipboard.") == true)
-        #expect(systemClipboardText() == "mock")
+        #expect(controller.statusMessage == "Dictation inserted. (confidence: 0.80)")
+        #expect(systemClipboardText() == "seed")
     }
 
     @Test
@@ -613,6 +616,7 @@ struct FloControllerTests {
 
         #expect(controller.statusMessage?.contains("Permission denied: Accessibility.") == true)
         #expect(controller.statusMessage?.contains("Transcript copied to clipboard.") == true)
+        #expect(dependencies.floatingBarManager.bannerCalls.last?.message == "Transcript copied to clipboard.")
         #expect(systemClipboardText() == "mock")
         #expect(controller.historyEntries.first?.success == false)
         #expect(controller.historyEntries.first?.inputText == "mock")
@@ -668,6 +672,7 @@ struct FloControllerTests {
         controller.pasteLastTranscript()
 
         #expect(controller.statusMessage?.contains("Last transcript copied to clipboard.") == true)
+        #expect(dependencies.floatingBarManager.bannerCalls.last?.message == "Last transcript copied to clipboard.")
         #expect(systemClipboardText() == "mock")
     }
 
@@ -1159,7 +1164,13 @@ private final class MockPermissionsService: PermissionsService {
 
 @MainActor
 private final class MockFloatingBarManager: FloatingBarManaging {
+    struct BannerCall {
+        let message: String
+        let kind: FloatingBarBannerKind
+    }
+
     var actions: FloatingBarActions?
+    var bannerCalls: [BannerCall] = []
 
     func setActions(_ actions: FloatingBarActions?) {
         self.actions = actions
@@ -1168,6 +1179,9 @@ private final class MockFloatingBarManager: FloatingBarManaging {
     func show(state: RecorderState) {}
     func update(state: RecorderState) {}
     func updateAudioLevel(_ level: Float) {}
+    func showBanner(message: String, kind: FloatingBarBannerKind) {
+        bannerCalls.append(BannerCall(message: message, kind: kind))
+    }
     func hide() {}
 }
 

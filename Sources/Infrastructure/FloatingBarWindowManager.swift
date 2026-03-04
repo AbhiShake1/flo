@@ -24,6 +24,7 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
         static let errorTextSpacing: CGFloat = 10
         static let errorCornerRadius: CGFloat = 12
         static let errorAutoDismissDelay: TimeInterval = 2.8
+        static let successAutoDismissDelay: TimeInterval = 2.2
         static let speakingStopButtonPadding: CGFloat = 2
         static let speakingStopIconMinSize: CGFloat = 7
         static let speakingStopIconMaxSize: CGFloat = 10
@@ -38,6 +39,11 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
     private enum HoverTarget {
         case dictation
         case read
+    }
+
+    private enum BannerTone {
+        case error
+        case success
     }
 
     private struct ErrorLayoutMetrics {
@@ -72,6 +78,9 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
     private var activeErrorMessage: String?
     private var dismissedErrorMessage: String?
     private var errorAutoDismissWorkItem: DispatchWorkItem?
+    private var activeSuccessMessage: String?
+    private var dismissedSuccessMessage: String?
+    private var successAutoDismissWorkItem: DispatchWorkItem?
 
     public override init() {
         super.init()
@@ -110,11 +119,28 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
         waveformView?.setLevel(CGFloat(clamped))
     }
 
+    public func showBanner(message: String, kind: FloatingBarBannerKind) {
+        let panel = ensurePanel()
+        let normalized = normalizedTooltipText(message) ?? "Copied to clipboard."
+
+        switch kind {
+        case .success:
+            registerSuccessMessage(normalized)
+        }
+
+        apply(state: currentState)
+        if !panel.isVisible {
+            positionPanel(panel)
+            panel.orderFrontRegardless()
+        }
+    }
+
     public func hide() {
         selectionMonitorTimer?.invalidate()
         selectionMonitorTimer = nil
         waveformView?.stopAnimating()
         clearErrorPresentationState()
+        clearSuccessPresentationState()
         hoveredTarget = nil
         hoverTooltip.hide(animated: false)
         panel?.orderOut(nil)
@@ -305,29 +331,50 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
             waveformMode = .listening
             errorMessage = nil
             clearErrorPresentationState()
+            clearSuccessPresentationState()
         case .transcribing, .injecting, .speaking:
             waveformMode = .processing
             errorMessage = nil
             clearErrorPresentationState()
+            clearSuccessPresentationState()
         case .error(let message):
             waveformMode = .idle
             let normalizedError = normalizedTooltipText(message) ?? "Something went wrong."
             registerErrorMessage(normalizedError)
             errorMessage = shouldPresentErrorMessage(normalizedError) ? normalizedError : nil
+            clearSuccessPresentationState()
         }
 
-        let isPresentingError = errorMessage != nil
-        if isPresentingError {
+        let successMessage: String?
+        if errorMessage == nil, let activeSuccessMessage, shouldPresentSuccessMessage(activeSuccessMessage) {
+            successMessage = activeSuccessMessage
+        } else {
+            successMessage = nil
+        }
+
+        let bannerMessage = errorMessage ?? successMessage
+        let bannerTone: BannerTone? = {
+            if errorMessage != nil {
+                return .error
+            }
+            if successMessage != nil {
+                return .success
+            }
+            return nil
+        }()
+
+        let isPresentingBanner = bannerMessage != nil
+        if isPresentingBanner {
             hoveredTarget = nil
             hoverTooltip.hide(animated: true)
         }
 
-        dictationHitArea?.isEnabled = canUseActions && !isBusy(state) && !isPresentingError
-        readButton?.isEnabled = canUseActions && canTriggerRead(for: state) && !isPresentingError
-        readButton?.alphaValue = isPresentingError ? 1 : readAlpha(for: state)
+        dictationHitArea?.isEnabled = canUseActions && !isBusy(state) && !isPresentingBanner
+        readButton?.isEnabled = canUseActions && canTriggerRead(for: state) && !isPresentingBanner
+        readButton?.alphaValue = isPresentingBanner ? 1 : readAlpha(for: state)
 
         updateRightSectionAppearance(for: state)
-        layoutPanel(errorMessage: errorMessage, animated: true)
+        layoutPanel(bannerMessage: bannerMessage, bannerTone: bannerTone, animated: true)
         applyWaveform(mode: waveformMode)
         refreshTooltipIfNeeded()
     }
@@ -354,7 +401,7 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
         }
     }
 
-    private func layoutPanel(errorMessage: String?, animated: Bool) {
+    private func layoutPanel(bannerMessage: String?, bannerTone: BannerTone?, animated: Bool) {
         guard let panel,
               let container,
               let dictationHitArea,
@@ -367,6 +414,7 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
         }
 
         let isSpeaking = currentState == .speaking
+        let usesWaveformPrimaryChip = currentState == .listening || currentState == .transcribing || currentState == .injecting
         let leftSectionWidth = Metrics.leftSectionWidth
         let leftSectionHeight = Metrics.leftSectionHeight
         let rightSectionWidth = isSpeaking ? Metrics.speakingRightSectionWidth : Metrics.rightSectionWidth
@@ -374,26 +422,26 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
         let gap = Metrics.sectionGap
         let nonErrorWidth = leftSectionWidth + gap + rightSectionWidth
         let nonErrorHeight = max(leftSectionHeight, rightSectionHeight)
-        let errorLayout = errorMessage.map { makeErrorLayout(for: $0, in: panel, label: errorLabel) }
-        let width = errorLayout?.width ?? nonErrorWidth
-        let height = errorLayout?.height ?? nonErrorHeight
-        let isErrorExpanded = errorLayout != nil
+        let bannerLayout = bannerMessage.map { makeErrorLayout(for: $0, in: panel, label: errorLabel) }
+        let width = bannerLayout?.width ?? nonErrorWidth
+        let height = bannerLayout?.height ?? nonErrorHeight
+        let isBannerExpanded = bannerLayout != nil
         let leftSectionY = floor((height - leftSectionHeight) / 2)
         let rightSectionX = leftSectionWidth + gap
         let rightSectionY = floor((height - rightSectionHeight) / 2)
 
         panel.setContentSize(NSSize(width: width, height: height))
         container.frame = NSRect(x: 0, y: 0, width: width, height: height)
-        container.layer?.cornerRadius = isErrorExpanded ? Metrics.errorCornerRadius : 0
-        leftSectionLayer?.isHidden = isErrorExpanded
-        updateContainerAppearance(isErrorExpanded: isErrorExpanded)
+        container.layer?.cornerRadius = isBannerExpanded ? Metrics.errorCornerRadius : 0
+        leftSectionLayer?.isHidden = isBannerExpanded || usesWaveformPrimaryChip
+        updateContainerAppearance(bannerTone: bannerTone)
 
-        dictationHitArea.isHidden = isErrorExpanded
-        readButton.isHidden = isErrorExpanded
-        dismissErrorButton.isHidden = !isErrorExpanded
-        rightSectionLayer?.isHidden = isErrorExpanded
+        dictationHitArea.isHidden = isBannerExpanded
+        readButton.isHidden = isBannerExpanded
+        dismissErrorButton.isHidden = !isBannerExpanded
+        rightSectionLayer?.isHidden = isBannerExpanded
 
-        if !isErrorExpanded {
+        if !isBannerExpanded {
             leftSectionLayer?.frame = NSRect(
                 x: 0,
                 y: leftSectionY,
@@ -429,35 +477,57 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
             updateReadStopButtonAppearance(isSpeaking: false, buttonBounds: .zero, height: height)
         }
 
-        if let errorMessage, let errorLayout {
+        if let bannerMessage, let bannerLayout {
             waveformView.isHidden = true
-            errorLabel.stringValue = errorMessage
+            errorLabel.stringValue = bannerMessage
             errorLabel.isHidden = false
-            errorLabel.frame = errorLayout.labelFrame
-            dismissErrorButton.frame = errorLayout.dismissFrame
+            errorLabel.frame = bannerLayout.labelFrame
+            dismissErrorButton.frame = bannerLayout.dismissFrame
         } else {
             dismissErrorButton.isHidden = true
             errorLabel.isHidden = true
             errorLabel.stringValue = ""
+            let waveformInsetX: CGFloat = usesWaveformPrimaryChip ? 0 : Metrics.horizontalPadding
+            let waveformInsetY: CGFloat = usesWaveformPrimaryChip ? 0 : 2
+            let waveformHeightInset: CGFloat = usesWaveformPrimaryChip ? 0 : 4
             waveformView.frame = NSRect(
-                x: Metrics.horizontalPadding,
-                y: leftSectionY + 2,
-                width: max(0, leftSectionWidth - (Metrics.horizontalPadding * 2)),
-                height: max(0, leftSectionHeight - 4)
+                x: waveformInsetX,
+                y: leftSectionY + waveformInsetY,
+                width: max(0, leftSectionWidth - (waveformInsetX * 2)),
+                height: max(0, leftSectionHeight - waveformHeightInset)
             )
+            if usesWaveformPrimaryChip {
+                waveformView.layer?.cornerRadius = leftSectionHeight / 2
+                waveformView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.56).cgColor
+                waveformView.layer?.borderColor = NSColor.white.withAlphaComponent(0.56).cgColor
+                waveformView.layer?.borderWidth = 1
+            } else {
+                waveformView.layer?.cornerRadius = 0
+                waveformView.layer?.backgroundColor = NSColor.clear.cgColor
+                waveformView.layer?.borderColor = NSColor.clear.cgColor
+                waveformView.layer?.borderWidth = 0
+            }
         }
 
         positionPanel(panel, targetWidth: width, targetHeight: height, animated: animated)
     }
 
-    private func updateContainerAppearance(isErrorExpanded: Bool) {
+    private func updateContainerAppearance(bannerTone: BannerTone?) {
         guard let layer = container?.layer else {
             return
         }
 
-        if isErrorExpanded {
+        if bannerTone == .error {
             layer.backgroundColor = NSColor.systemRed.withAlphaComponent(0.33).cgColor
             layer.borderColor = NSColor.systemRed.withAlphaComponent(0.88).cgColor
+            layer.borderWidth = 1.2
+            layer.masksToBounds = true
+            return
+        }
+
+        if bannerTone == .success {
+            layer.backgroundColor = NSColor.systemGreen.withAlphaComponent(0.3).cgColor
+            layer.borderColor = NSColor.systemGreen.withAlphaComponent(0.86).cgColor
             layer.borderWidth = 1.2
             layer.masksToBounds = true
             return
@@ -608,11 +678,18 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
 
     @objc
     private func handleDismissErrorTap() {
-        guard let activeErrorMessage else {
+        if case .error = currentState, let activeErrorMessage {
+            dismissedErrorMessage = activeErrorMessage
+            cancelErrorAutoDismiss()
+            apply(state: currentState)
             return
         }
-        dismissedErrorMessage = activeErrorMessage
-        cancelErrorAutoDismiss()
+
+        guard let activeSuccessMessage else {
+            return
+        }
+        dismissedSuccessMessage = activeSuccessMessage
+        cancelSuccessAutoDismiss()
         apply(state: currentState)
     }
 
@@ -704,6 +781,29 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
         cancelErrorAutoDismiss()
     }
 
+    private func registerSuccessMessage(_ message: String) {
+        if activeSuccessMessage != message {
+            activeSuccessMessage = message
+            dismissedSuccessMessage = nil
+            scheduleSuccessAutoDismiss(for: message)
+            return
+        }
+
+        if dismissedSuccessMessage == nil, successAutoDismissWorkItem == nil {
+            scheduleSuccessAutoDismiss(for: message)
+        }
+    }
+
+    private func shouldPresentSuccessMessage(_ message: String) -> Bool {
+        dismissedSuccessMessage != message
+    }
+
+    private func clearSuccessPresentationState() {
+        activeSuccessMessage = nil
+        dismissedSuccessMessage = nil
+        cancelSuccessAutoDismiss()
+    }
+
     private func scheduleErrorAutoDismiss(for message: String) {
         cancelErrorAutoDismiss()
 
@@ -733,6 +833,35 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
     private func cancelErrorAutoDismiss() {
         errorAutoDismissWorkItem?.cancel()
         errorAutoDismissWorkItem = nil
+    }
+
+    private func scheduleSuccessAutoDismiss(for message: String) {
+        cancelSuccessAutoDismiss()
+
+        let workItem = DispatchWorkItem { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    return
+                }
+
+                guard self.activeSuccessMessage == message else {
+                    self.successAutoDismissWorkItem = nil
+                    return
+                }
+
+                self.dismissedSuccessMessage = message
+                self.successAutoDismissWorkItem = nil
+                self.apply(state: self.currentState)
+            }
+        }
+
+        successAutoDismissWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + Metrics.successAutoDismissDelay, execute: workItem)
+    }
+
+    private func cancelSuccessAutoDismiss() {
+        successAutoDismissWorkItem?.cancel()
+        successAutoDismissWorkItem = nil
     }
 
     private func startSelectionMonitoringIfNeeded() {
@@ -1033,8 +1162,10 @@ private final class FloatingHoverTooltip {
 
 private final class ActivityWaveformView: NSView {
     private enum Metrics {
-        static let silenceFloor: CGFloat = 0.05
-        static let minimumVisibleLevel: CGFloat = 0.02
+        static let silenceFloor: CGFloat = 0.025
+        static let minimumVisibleLevel: CGFloat = 0.008
+        static let listeningInputGain: CGFloat = 2.35
+        static let listeningDecayPerTick: CGFloat = 0.965
     }
 
     enum Mode {
@@ -1044,6 +1175,9 @@ private final class ActivityWaveformView: NSView {
 
     var mode: Mode = .listening {
         didSet {
+            if oldValue != mode, mode != .listening {
+                levelHistory.removeAll(keepingCapacity: true)
+            }
             needsDisplay = true
         }
     }
@@ -1051,12 +1185,17 @@ private final class ActivityWaveformView: NSView {
     private var currentLevel: CGFloat = 0
     private var phase: CGFloat = 0
     private var animationTimer: Timer?
+    private var levelHistory: [CGFloat] = []
 
     func setLevel(_ level: CGFloat) {
         let clamped = min(max(level, 0), 1)
         let gated = max(0, (clamped - Metrics.silenceFloor) / (1 - Metrics.silenceFloor))
-        let smoothing: CGFloat = gated > currentLevel ? 0.42 : 0.18
-        currentLevel = currentLevel + ((gated - currentLevel) * smoothing)
+        let boosted = min(1, gated * Metrics.listeningInputGain)
+        let smoothing: CGFloat = boosted > currentLevel ? 0.5 : 0.22
+        currentLevel = currentLevel + ((boosted - currentLevel) * smoothing)
+        if mode == .listening {
+            appendListeningSample(currentLevel)
+        }
         needsDisplay = true
     }
 
@@ -1090,6 +1229,8 @@ private final class ActivityWaveformView: NSView {
         animationTimer?.invalidate()
         animationTimer = nil
         phase = 0
+        currentLevel = 0
+        levelHistory.removeAll(keepingCapacity: true)
         needsDisplay = true
     }
 
@@ -1099,7 +1240,37 @@ private final class ActivityWaveformView: NSView {
         if phase > (.pi * 2) {
             phase -= (.pi * 2)
         }
+
+        if mode == .listening {
+            currentLevel *= Metrics.listeningDecayPerTick
+            appendListeningSample(currentLevel)
+        }
+
         needsDisplay = true
+    }
+
+    private func appendListeningSample(_ sample: CGFloat) {
+        let maxSamples = max(12, Int(bounds.width / 2.8))
+        levelHistory.append(min(max(sample, 0), 1))
+        let overflow = levelHistory.count - maxSamples
+        if overflow > 0 {
+            levelHistory.removeFirst(overflow)
+        }
+    }
+
+    private func listeningSamples(for barCount: Int) -> [CGFloat] {
+        guard !levelHistory.isEmpty else {
+            return Array(repeating: 0, count: barCount)
+        }
+
+        var samples = Array(repeating: CGFloat(0), count: barCount)
+        let start = max(0, levelHistory.count - barCount)
+        let visible = levelHistory[start...]
+        let offset = barCount - visible.count
+        for (index, value) in visible.enumerated() {
+            samples[offset + index] = value
+        }
+        return samples
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -1119,42 +1290,53 @@ private final class ActivityWaveformView: NSView {
         NSColor.white.withAlphaComponent(0.48).setStroke()
         baseline.stroke()
 
-        let barCount = max(10, Int(rect.width / 4.5))
+        let barCount = max(10, Int(rect.width / 3.1))
         let step = rect.width / CGFloat(barCount)
-        let barWidth = max(1.2, min(2.1, step * 0.48))
+        let barWidth = max(1.1, min(1.8, step * 0.42))
 
-        if mode == .listening && currentLevel <= Metrics.minimumVisibleLevel {
-            return
-        }
-
-        for index in 0..<barCount {
-            let t = CGFloat(index) / CGFloat(max(barCount - 1, 1))
-            let distanceFromCenter = abs((t * 2) - 1)
-            let envelope = max(0.08, 1 - (distanceFromCenter * 1.2))
-            let barHeight: CGFloat
-            let brightness: CGFloat
-
-            switch mode {
-            case .listening:
-                let level = pow(currentLevel, 0.8)
-                let contour = 0.85 + (0.15 * abs(sin((CGFloat(index) * 0.35) + phase)))
-                let amplitude = (rect.height - 1.6) * level * envelope * contour
-                barHeight = max(1.2, min(rect.height - 1.4, amplitude))
-                brightness = 0.78 + (0.22 * min(1, level + (envelope * 0.2)))
-            case .processing:
-                let pulse = abs(sin((phase * 0.72) + (CGFloat(index) * 0.23)))
-                let amplitude = (1.2 + (rect.height * 0.72 * 0.5 * pulse)) * envelope
-                barHeight = max(1.8, min(rect.height - 1.5, amplitude))
-                brightness = 0.72 + (0.28 * pulse)
+        switch mode {
+        case .listening:
+            let samples = listeningSamples(for: barCount)
+            let hasVisibleBars = samples.contains { $0 > Metrics.minimumVisibleLevel }
+            if !hasVisibleBars {
+                return
             }
 
-            let x = rect.minX + (step * CGFloat(index)) + ((step - barWidth) / 2)
-            let y = baselineY - (barHeight / 2)
-            let barRect = NSRect(x: x, y: y, width: barWidth, height: barHeight)
-            let path = NSBezierPath(roundedRect: barRect, xRadius: barWidth / 2, yRadius: barWidth / 2)
+            for index in 0..<barCount {
+                let level = samples[index]
+                guard level > Metrics.minimumVisibleLevel else {
+                    continue
+                }
 
-            NSColor.white.withAlphaComponent(brightness).setFill()
-            path.fill()
+                let shaped = pow(level, 0.58)
+                let barHeight = max(1.1, min(rect.height - 0.7, (rect.height - 0.7) * shaped))
+                let brightness = 0.74 + (0.24 * shaped)
+                let x = rect.minX + (step * CGFloat(index)) + ((step - barWidth) / 2)
+                let y = baselineY - (barHeight / 2)
+                let barRect = NSRect(x: x, y: y, width: barWidth, height: barHeight)
+                let path = NSBezierPath(roundedRect: barRect, xRadius: barWidth / 2, yRadius: barWidth / 2)
+
+                NSColor.white.withAlphaComponent(brightness).setFill()
+                path.fill()
+            }
+        case .processing:
+            for index in 0..<barCount {
+                let t = CGFloat(index) / CGFloat(max(barCount - 1, 1))
+                let sweep = (sin(phase * 0.8) + 1) / 2
+                let focusDistance = abs(t - sweep)
+                let focus = max(0.1, 1 - (focusDistance * 5.5))
+                let pulse = 0.35 + (0.65 * abs(sin((phase * 1.7) + (CGFloat(index) * 0.27))))
+                let amplitude = 1.6 + ((rect.height - 1.2) * focus * pulse)
+                let barHeight = max(1.6, min(rect.height - 1.1, amplitude))
+                let brightness = 0.46 + (0.4 * focus) + (0.14 * pulse)
+                let x = rect.minX + (step * CGFloat(index)) + ((step - barWidth) / 2)
+                let y = baselineY - (barHeight / 2)
+                let barRect = NSRect(x: x, y: y, width: barWidth, height: barHeight)
+                let path = NSBezierPath(roundedRect: barRect, xRadius: barWidth / 2, yRadius: barWidth / 2)
+
+                NSColor.white.withAlphaComponent(brightness).setFill()
+                path.fill()
+            }
         }
     }
 }
