@@ -1885,7 +1885,9 @@ private struct ProviderConfigurationSection: View {
     @State private var pendingCredentialRemovalIndexByProvider: [AIProvider: Int] = [:]
     @State private var modelSearchQueriesByCredential: [AIProvider: [Int: String]] = [:]
     @State private var presentedModelPopoverByProvider: [AIProvider: Int] = [:]
+    @State private var workingCredentialOrderByProvider: [AIProvider: [String]] = [:]
     @State private var draggedProvider: AIProvider?
+    @State private var draggedCredential: ProviderCredentialDragState?
     @State private var pendingRemovalProvider: AIProvider?
 
     init(
@@ -1906,12 +1908,14 @@ private struct ProviderConfigurationSection: View {
         }
         .onAppear {
             syncWorkingOrder(with: activeProviders)
+            syncWorkingCredentialOrders(with: activeProviders)
             if expandedProviders.isEmpty, let first = activeProviders.first {
                 expandedProviders.insert(first)
             }
         }
         .onChange(of: activeProviderIDs) { _, _ in
             syncWorkingOrder(with: activeProviders)
+            syncWorkingCredentialOrders(with: activeProviders)
             if let pendingRemovalProvider, !activeProviders.contains(pendingRemovalProvider) {
                 self.pendingRemovalProvider = nil
             }
@@ -2331,6 +2335,44 @@ private struct ProviderConfigurationSection: View {
         }
     }
 
+    private func syncWorkingCredentialOrders(with providers: [AIProvider]) {
+        let activeSet = Set(providers)
+        workingCredentialOrderByProvider = workingCredentialOrderByProvider.filter { activeSet.contains($0.key) }
+        for provider in providers {
+            syncWorkingCredentialOrder(for: provider, with: controller.providerCredentials(for: provider))
+        }
+        if let draggedCredential, !activeSet.contains(draggedCredential.provider) {
+            self.draggedCredential = nil
+        }
+    }
+
+    private func syncWorkingCredentialOrder(for provider: AIProvider, with credentials: [String]) {
+        let normalized = normalizedCredentialOrder(
+            workingCredentialOrderByProvider[provider] ?? credentials,
+            against: credentials
+        )
+        workingCredentialOrderByProvider[provider] = normalized
+    }
+
+    private func normalizedCredentialOrder(_ proposed: [String], against source: [String]) -> [String] {
+        let sourceSet = Set(source)
+        var seen = Set<String>()
+        var normalized: [String] = []
+        normalized.reserveCapacity(source.count)
+
+        for credential in proposed where sourceSet.contains(credential) {
+            if seen.insert(credential).inserted {
+                normalized.append(credential)
+            }
+        }
+
+        for credential in source where seen.insert(credential).inserted {
+            normalized.append(credential)
+        }
+
+        return normalized
+    }
+
     private func syncCredentialInteractionState(with providers: [AIProvider]) {
         let activeSet = Set(providers)
         addCredentialDrafts = addCredentialDrafts.filter { activeSet.contains($0.key) }
@@ -2342,6 +2384,10 @@ private struct ProviderConfigurationSection: View {
         pendingCredentialRemovalIndexByProvider = pendingCredentialRemovalIndexByProvider.filter { activeSet.contains($0.key) }
         modelSearchQueriesByCredential = modelSearchQueriesByCredential.filter { activeSet.contains($0.key) }
         presentedModelPopoverByProvider = presentedModelPopoverByProvider.filter { activeSet.contains($0.key) }
+        workingCredentialOrderByProvider = workingCredentialOrderByProvider.filter { activeSet.contains($0.key) }
+        if let draggedCredential, !activeSet.contains(draggedCredential.provider) {
+            self.draggedCredential = nil
+        }
     }
 
     private func clearCredentialInteractionState(for provider: AIProvider) {
@@ -2354,6 +2400,81 @@ private struct ProviderConfigurationSection: View {
         pendingCredentialRemovalIndexByProvider.removeValue(forKey: provider)
         modelSearchQueriesByCredential.removeValue(forKey: provider)
         presentedModelPopoverByProvider.removeValue(forKey: provider)
+        workingCredentialOrderByProvider.removeValue(forKey: provider)
+        if draggedCredential?.provider == provider {
+            draggedCredential = nil
+        }
+    }
+
+    private func commitCredentialReorder(_ proposedOrder: [String], for provider: AIProvider) {
+        let currentCredentials = controller.providerCredentials(for: provider)
+        let normalizedOrder = normalizedCredentialOrder(proposedOrder, against: currentCredentials)
+        workingCredentialOrderByProvider[provider] = normalizedOrder
+
+        guard normalizedOrder != currentCredentials else {
+            return
+        }
+
+        remapCredentialInteractionState(for: provider, from: currentCredentials, to: normalizedOrder)
+        controller.reorderProviderCredentials(normalizedOrder, for: provider)
+    }
+
+    private func remapCredentialInteractionState(for provider: AIProvider, from previousOrder: [String], to nextOrder: [String]) {
+        let previousTokenByIndex = Dictionary(uniqueKeysWithValues: previousOrder.enumerated().map { ($0.offset, $0.element) })
+        let nextIndexByToken = Dictionary(uniqueKeysWithValues: nextOrder.enumerated().map { ($0.element, $0.offset) })
+
+        func remapIndex(_ index: Int?) -> Int? {
+            guard
+                let index,
+                let token = previousTokenByIndex[index],
+                let nextIndex = nextIndexByToken[token]
+            else {
+                return nil
+            }
+            return nextIndex
+        }
+
+        if let visible = visibleCredentialIndicesByProvider[provider] {
+            let remapped = Set(visible.compactMap { remapIndex($0) })
+            if remapped.isEmpty {
+                visibleCredentialIndicesByProvider.removeValue(forKey: provider)
+            } else {
+                visibleCredentialIndicesByProvider[provider] = remapped
+            }
+        }
+
+        if let copied = copiedCredentialIndicesByProvider[provider] {
+            let remapped = Set(copied.compactMap { remapIndex($0) })
+            if remapped.isEmpty {
+                copiedCredentialIndicesByProvider.removeValue(forKey: provider)
+            } else {
+                copiedCredentialIndicesByProvider[provider] = remapped
+            }
+        }
+
+        editingCredentialIndexByProvider[provider] = remapIndex(editingCredentialIndexByProvider[provider])
+        if editingCredentialIndexByProvider[provider] == nil {
+            editingCredentialDraftByProvider.removeValue(forKey: provider)
+        }
+
+        pendingCredentialRemovalIndexByProvider[provider] = remapIndex(pendingCredentialRemovalIndexByProvider[provider])
+
+        if let searches = modelSearchQueriesByCredential[provider] {
+            var remapped: [Int: String] = [:]
+            remapped.reserveCapacity(searches.count)
+            for (index, query) in searches {
+                if let nextIndex = remapIndex(index) {
+                    remapped[nextIndex] = query
+                }
+            }
+            if remapped.isEmpty {
+                modelSearchQueriesByCredential.removeValue(forKey: provider)
+            } else {
+                modelSearchQueriesByCredential[provider] = remapped
+            }
+        }
+
+        presentedModelPopoverByProvider[provider] = remapIndex(presentedModelPopoverByProvider[provider])
     }
 
     private func isCredentialVisible(_ index: Int, for provider: AIProvider) -> Bool {
@@ -2520,8 +2641,9 @@ private struct ProviderConfigurationSection: View {
 
     private func providerCard(_ provider: AIProvider) -> some View {
         let displayName = controller.providerDisplayName(for: provider)
-        let credentials = controller.providerCredentials(for: provider)
-        let keyCount = credentials.count
+        let storedCredentials = controller.providerCredentials(for: provider)
+        let credentials = workingCredentialOrderByProvider[provider] ?? storedCredentials
+        let keyCount = storedCredentials.count
         let isExpanded = true
         let isPendingRemoval = pendingRemovalProvider == provider
         let addingCredential = isAddingCredentialByProvider.contains(provider)
@@ -2588,7 +2710,8 @@ private struct ProviderConfigurationSection: View {
                     providerCredentialsSection(
                         provider: provider,
                         displayName: displayName,
-                        credentials: credentials,
+                        sourceCredentials: storedCredentials,
+                        orderedCredentials: credentials,
                         editingIndex: editingIndex,
                         pendingCredentialRemovalIndex: pendingCredentialRemovalIndex
                     )
@@ -2621,25 +2744,34 @@ private struct ProviderConfigurationSection: View {
                 .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
         )
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .onAppear {
+            syncWorkingCredentialOrder(for: provider, with: storedCredentials)
+        }
+        .onChange(of: storedCredentials) { _, nextCredentials in
+            syncWorkingCredentialOrder(for: provider, with: nextCredentials)
+        }
     }
 
     private func providerCredentialsSection(
         provider: AIProvider,
         displayName: String,
-        credentials: [String],
+        sourceCredentials: [String],
+        orderedCredentials: [String],
         editingIndex: Int?,
         pendingCredentialRemovalIndex: Int?
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            if credentials.isEmpty {
+            if orderedCredentials.isEmpty {
                 Text("No API keys saved yet.")
                     .font(.caption2)
                     .foregroundStyle(Color.white.opacity(0.58))
             } else {
-                ForEach(Array(credentials.enumerated()), id: \.offset) { index, credential in
+                ForEach(Array(orderedCredentials.enumerated()), id: \.offset) { index, credential in
                     providerCredentialRow(
                         provider: provider,
                         displayName: displayName,
+                        orderedCredentials: orderedCredentials,
+                        sourceCredentials: sourceCredentials,
                         index: index,
                         credential: credential,
                         isEditing: editingIndex == index,
@@ -2653,32 +2785,42 @@ private struct ProviderConfigurationSection: View {
     private func providerCredentialRow(
         provider: AIProvider,
         displayName: String,
+        orderedCredentials: [String],
+        sourceCredentials: [String],
         index: Int,
         credential: String,
         isEditing: Bool,
         pendingRemoval: Bool
     ) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            if isEditing {
-                providerCredentialEditorRow(
-                    provider: provider,
-                    displayName: displayName,
-                    index: index
-                )
-            } else {
-                providerCredentialDisplayRow(
-                    provider: provider,
-                    displayName: displayName,
-                    index: index,
-                    credential: credential,
-                    pendingRemoval: pendingRemoval
-                )
-            }
+        HStack(alignment: .top, spacing: 8) {
+            providerCredentialDragHandle(
+                provider: provider,
+                index: index,
+                isEnabled: orderedCredentials.count > 1 && !isEditing
+            )
 
-            if pendingRemoval {
-                Text("Press remove again to confirm deleting API key \(index + 1).")
-                    .font(.caption2)
-                    .foregroundStyle(FloTheme.warning)
+            VStack(alignment: .leading, spacing: 5) {
+                if isEditing {
+                    providerCredentialEditorRow(
+                        provider: provider,
+                        displayName: displayName,
+                        index: index
+                    )
+                } else {
+                    providerCredentialDisplayRow(
+                        provider: provider,
+                        displayName: displayName,
+                        index: index,
+                        credential: credential,
+                        pendingRemoval: pendingRemoval
+                    )
+                }
+
+                if pendingRemoval {
+                    Text("Press remove again to confirm deleting API key \(index + 1).")
+                        .font(.caption2)
+                        .foregroundStyle(FloTheme.warning)
+                }
             }
         }
         .padding(.horizontal, 8)
@@ -2691,6 +2833,46 @@ private struct ProviderConfigurationSection: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
         )
+        .onDrop(
+            of: [UTType.text],
+            delegate: ProviderCredentialReorderDropDelegate(
+                provider: provider,
+                targetIndex: index,
+                orderedCredentials: workingCredentialOrderBinding(for: provider, fallback: orderedCredentials),
+                draggedCredential: $draggedCredential,
+                onCommit: { nextOrder in
+                    let normalizedOrder = normalizedCredentialOrder(nextOrder, against: sourceCredentials)
+                    commitCredentialReorder(normalizedOrder, for: provider)
+                }
+            )
+        )
+    }
+
+    @ViewBuilder
+    private func providerCredentialDragHandle(
+        provider: AIProvider,
+        index: Int,
+        isEnabled: Bool
+    ) -> some View {
+        let handleIcon = Image(systemName: "line.3.horizontal")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(isEnabled ? Color.white.opacity(0.56) : Color.white.opacity(0.28))
+            .frame(width: 14)
+            .padding(.top, 2)
+            .padding(.bottom, 1)
+            .contentShape(Rectangle())
+            .accessibilityLabel("Reorder API key \(index + 1)")
+
+        if isEnabled {
+            handleIcon
+                .onDrag {
+                    draggedCredential = ProviderCredentialDragState(provider: provider, index: index)
+                    return NSItemProvider(object: "\(provider.rawValue)-\(index)" as NSString)
+                }
+                .help("Drag to reorder API keys")
+        } else {
+            handleIcon
+        }
     }
 
     private func providerCredentialEditorRow(
@@ -3004,6 +3186,13 @@ private struct ProviderConfigurationSection: View {
             set: { editingCredentialDraftByProvider[provider] = $0 }
         )
     }
+
+    private func workingCredentialOrderBinding(for provider: AIProvider, fallback: [String]) -> Binding<[String]> {
+        Binding(
+            get: { workingCredentialOrderByProvider[provider] ?? fallback },
+            set: { workingCredentialOrderByProvider[provider] = $0 }
+        )
+    }
 }
 
 private struct ProviderReorderDropDelegate: DropDelegate {
@@ -3038,6 +3227,52 @@ private struct ProviderReorderDropDelegate: DropDelegate {
         }
         onCommit(orderedProviders)
         draggedProvider = nil
+        return true
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+}
+
+private struct ProviderCredentialDragState {
+    let provider: AIProvider
+    let index: Int
+}
+
+private struct ProviderCredentialReorderDropDelegate: DropDelegate {
+    let provider: AIProvider
+    let targetIndex: Int
+    @Binding var orderedCredentials: [String]
+    @Binding var draggedCredential: ProviderCredentialDragState?
+    let onCommit: ([String]) -> Void
+
+    func dropEntered(info: DropInfo) {
+        guard
+            let draggedCredential,
+            draggedCredential.provider == provider,
+            draggedCredential.index != targetIndex,
+            orderedCredentials.indices.contains(draggedCredential.index),
+            orderedCredentials.indices.contains(targetIndex)
+        else {
+            return
+        }
+
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+            orderedCredentials.move(
+                fromOffsets: IndexSet(integer: draggedCredential.index),
+                toOffset: targetIndex > draggedCredential.index ? targetIndex + 1 : targetIndex
+            )
+        }
+        self.draggedCredential = ProviderCredentialDragState(provider: provider, index: targetIndex)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard let draggedCredential, draggedCredential.provider == provider else {
+            return false
+        }
+        onCommit(orderedCredentials)
+        self.draggedCredential = nil
         return true
     }
 
