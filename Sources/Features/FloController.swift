@@ -744,6 +744,8 @@ public final class FloController: ObservableObject {
     private let modelsDevCatalogService: ModelsDevCatalogService
     private var isDictationListening = false
     private var stateResetTask: Task<Void, Never>?
+    private var readAloudTask: Task<Void, Never>?
+    private var readAloudTaskID: UInt64 = 0
     private var liveInjectedTranscript = ""
     private var didPauseLiveTypingAfterError = false
     private var lastLiveInjectionAt = Date.distantPast
@@ -1985,16 +1987,25 @@ public final class FloController: ObservableObject {
             return
         }
 
+        setRecorderState(.speaking)
+
         do {
+            try Task.checkCancellation()
             let session = try await validatedSession()
+            try Task.checkCancellation()
             try ensurePermissionStatusForReadAloud()
+            try Task.checkCancellation()
             let selectedText = try await readSelectedTextWithRetry()
+            try Task.checkCancellation()
             let normalized = selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !normalized.isEmpty else {
                 throw FloError.noSelectedText
             }
 
-            setRecorderState(.speaking)
+            guard recorderState == .speaking else {
+                throw CancellationError()
+            }
+            try Task.checkCancellation()
             try await environment.ttsService.synthesizeAndPlay(
                 text: normalized,
                 authToken: session.accessToken,
@@ -2101,7 +2112,7 @@ public final class FloController: ObservableObject {
                 },
                 readSelectedTriggered: { [weak self] in
                     Task { @MainActor in
-                        await self?.readSelectedTextFromHotkey()
+                        await self?.toggleReadSelectedFromFloatingBar()
                     }
                 }
             )
@@ -2158,12 +2169,38 @@ public final class FloController: ObservableObject {
 
     private func toggleReadSelectedFromFloatingBar() async {
         if recorderState == .speaking {
-            environment.ttsService.stopPlayback()
-            statusMessage = "Read-aloud canceled."
-            setRecorderState(.idle)
+            cancelReadAloud()
             return
         }
-        await readSelectedTextFromHotkey()
+        startReadAloud()
+    }
+
+    private func startReadAloud() {
+        readAloudTaskID &+= 1
+        let taskID = readAloudTaskID
+        readAloudTask?.cancel()
+        readAloudTask = Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+            defer {
+                if self.readAloudTaskID == taskID {
+                    self.readAloudTask = nil
+                }
+            }
+            await self.readSelectedTextFromHotkey()
+        }
+    }
+
+    private func cancelReadAloud() {
+        readAloudTaskID &+= 1
+        readAloudTask?.cancel()
+        readAloudTask = nil
+        environment.ttsService.stopPlayback()
+        statusMessage = "Read-aloud canceled."
+        if recorderState == .speaking {
+            setRecorderState(.idle)
+        }
     }
 
     private func setRecorderState(_ newState: RecorderState) {
