@@ -153,15 +153,15 @@ private struct StatusBarMenuContent: View {
 private enum AppFlowStage: Int, CaseIterable {
     case login
     case permissions
-    case settings
     case hotkeys
     case history
+    case settings
     case voice
 
     var title: String {
         switch self {
         case .login:
-            return "Login"
+            return "Providers"
         case .permissions:
             return "Permissions"
         case .settings:
@@ -178,7 +178,7 @@ private enum AppFlowStage: Int, CaseIterable {
     var subtitle: String {
         switch self {
         case .login:
-            return "Account and API access"
+            return "Provider routing and key management"
         case .permissions:
             return "System permission management"
         case .settings:
@@ -189,6 +189,24 @@ private enum AppFlowStage: Int, CaseIterable {
             return "Session events and recent activity"
         case .voice:
             return "Speech playback and dictation rewrite"
+        }
+    }
+
+    var workspaceTitle: String {
+        switch self {
+        case .login:
+            return "Provider Workspace"
+        default:
+            return title
+        }
+    }
+
+    var workspaceSubtitle: String {
+        switch self {
+        case .login:
+            return "Search from all providers, add only the ones you want, drag to reorder failover priority, and manage API keys inline."
+        default:
+            return subtitle
         }
     }
 
@@ -231,7 +249,6 @@ private enum FloTheme {
 private struct RootView: View {
     @ObservedObject var controller: FloController
     @State private var selectedStage: AppFlowStage = .login
-    @State private var settingsSearchQuery = ""
 
     private var currentStage: AppFlowStage {
         if !controller.isAuthenticated {
@@ -272,9 +289,8 @@ private struct RootView: View {
                     selectedStage = stage
                 }
                 .frame(width: 304)
-                .padding(.leading, 0)
-                .padding(.trailing, 0)
-                .padding(.vertical, 0)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 10)
 
                 Rectangle()
                     .fill(Color.white.opacity(0.14))
@@ -283,8 +299,7 @@ private struct RootView: View {
 
                 WorkspaceSurface(
                     controller: controller,
-                    activeStage: activeStage,
-                    settingsSearchQuery: $settingsSearchQuery
+                    activeStage: activeStage
                 )
                 .padding(.horizontal, 22)
                 .padding(.vertical, 20)
@@ -298,9 +313,6 @@ private struct RootView: View {
         .onChange(of: currentStage) { _, newStage in
             if !availableStages.contains(selectedStage) {
                 selectedStage = newStage
-            }
-            if newStage != .settings {
-                settingsSearchQuery = ""
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .floNavigateToStage)) { notification in
@@ -316,16 +328,12 @@ private struct RootView: View {
     private func navigate(to target: StatusBarNavigationTarget) {
         switch target {
         case .home:
-            settingsSearchQuery = ""
             selectedStage = currentStage
         case .shortcuts:
-            settingsSearchQuery = ""
             selectedStage = .hotkeys
         case .permissions:
-            settingsSearchQuery = ""
             selectedStage = .permissions
         case .voice:
-            settingsSearchQuery = ""
             selectedStage = .voice
         }
 
@@ -563,8 +571,8 @@ private struct SidebarSurface: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
         .frame(maxHeight: .infinity, alignment: .top)
     }
 }
@@ -611,31 +619,29 @@ private struct SidebarStageRow: View {
 private struct WorkspaceSurface: View {
     @ObservedObject var controller: FloController
     let activeStage: AppFlowStage
-    @Binding var settingsSearchQuery: String
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(activeStage.title)
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(FloTheme.textPrimary)
-                    Text(activeStage.subtitle)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(FloTheme.textSecondary)
-                }
-                Spacer()
-                if activeStage == .settings {
-                    ToolbarSearchField(text: $settingsSearchQuery)
-                        .frame(width: 320)
-                }
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 20)
-            .padding(.bottom, 14)
+            if activeStage != .settings {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(activeStage.workspaceTitle)
+                            .font(.system(size: 24, weight: .semibold))
+                            .foregroundStyle(FloTheme.textPrimary)
 
-            Divider()
-                .overlay(Color.white.opacity(0.14))
+                        Text(activeStage.workspaceSubtitle)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(FloTheme.textSecondary)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 20)
+                .padding(.bottom, 14)
+
+                Divider()
+                    .overlay(Color.white.opacity(0.14))
+            }
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 16) {
@@ -646,7 +652,7 @@ private struct WorkspaceSurface: View {
                         case .permissions:
                             PermissionStageView(controller: controller)
                         case .settings:
-                            SettingsStageView(controller: controller, searchQuery: $settingsSearchQuery)
+                            SettingsStageView(controller: controller)
                         case .hotkeys:
                             HotkeysStageView(controller: controller)
                         case .history:
@@ -664,43 +670,6 @@ private struct WorkspaceSurface: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-private struct ToolbarSearchField: View {
-    @Binding var text: String
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(FloTheme.textSecondary)
-
-            TextField("Search settings", text: $text)
-                .textFieldStyle(.plain)
-                .foregroundStyle(FloTheme.textPrimary)
-
-            if !text.isEmpty {
-                Button {
-                    text = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(FloTheme.textSecondary)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.white.opacity(0.10))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
-        )
     }
 }
 
@@ -795,14 +764,6 @@ private struct LoginStageView: View {
     var body: some View {
         CardContainer {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Provider Workspace")
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(FloTheme.textPrimary)
-
-                Text(subtitle)
-                    .foregroundStyle(FloTheme.textSecondary)
-                    .font(.system(size: 14, weight: .medium))
-
                 HStack(spacing: 8) {
                     Text("Primary route: \(controller.authProviderDisplayName)")
                         .font(.caption)
@@ -860,10 +821,6 @@ private struct LoginStageView: View {
             }
         }
     }
-
-    private var subtitle: String {
-        "Search from all providers, add only the ones you want, drag to reorder failover priority, and manage API keys inline."
-    }
 }
 
 private struct PermissionStageView: View {
@@ -902,7 +859,6 @@ private struct PermissionStageView: View {
 
 private struct SettingsStageView: View {
     @ObservedObject var controller: FloController
-    @Binding var searchQuery: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -937,56 +893,11 @@ private struct SettingsStageView: View {
                 alignment: .leading,
                 spacing: 16
             ) {
-                if showSystemSection {
-                    CardContainer {
-                        UtilityActionsSection(controller: controller)
-                    }
-                }
-            }
-
-            if showEmptyState {
                 CardContainer {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("No settings match")
-                            .font(.headline)
-                            .foregroundStyle(FloTheme.textPrimary)
-                        Text("Try a different search keyword or clear the filter.")
-                            .font(.subheadline)
-                            .foregroundStyle(FloTheme.textSecondary)
-                        Button("Clear search") {
-                            searchQuery = ""
-                        }
-                        .buttonStyle(SecondaryActionButtonStyle())
-                    }
+                    UtilityActionsSection(controller: controller)
                 }
             }
-
         }
-    }
-
-    private var searchTerms: [String] {
-        searchQuery
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-            .split(separator: " ")
-            .map(String.init)
-    }
-
-    private func matches(_ keywords: [String]) -> Bool {
-        guard !searchTerms.isEmpty else {
-            return true
-        }
-        let haystack = keywords.joined(separator: " ").lowercased()
-        return searchTerms.allSatisfy { haystack.contains($0) }
-    }
-
-    private var showSystemSection: Bool {
-        matches(["system", "live typing", "updates", "dictation"])
-    }
-
-    private var showEmptyState: Bool {
-        !searchTerms.isEmpty &&
-            !showSystemSection
     }
 }
 
