@@ -5,13 +5,14 @@ import Foundation
 @MainActor
 public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
     private enum Metrics {
-        static let collapsedWidth: CGFloat = 37
-        static let speakingWidth: CGFloat = 43
-        static let collapsedHeight: CGFloat = 9
-        static let rightSectionWidth: CGFloat = 9
-        static let speakingRightSectionWidth: CGFloat = 15
+        static let leftSectionWidth: CGFloat = 37
+        static let leftSectionHeight: CGFloat = 9
+        static let sectionGap: CGFloat = 2
+        static let rightSectionWidth: CGFloat = 20
+        static let rightSectionHeight: CGFloat = 9
+        static let speakingRightSectionWidth: CGFloat = 60
+        static let speakingRightSectionHeight: CGFloat = 18
         static let horizontalPadding: CGFloat = 5
-        static let dividerInset: CGFloat = 3
         static let panelBottomInset: CGFloat = 14
         static let errorMinWidth: CGFloat = 300
         static let errorMaxWidth: CGFloat = 560
@@ -23,8 +24,9 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
         static let errorTextSpacing: CGFloat = 10
         static let errorCornerRadius: CGFloat = 12
         static let errorAutoDismissDelay: TimeInterval = 2.8
-        static let speakingStopIconMinSize: CGFloat = 3.6
-        static let speakingStopIconMaxSize: CGFloat = 5.4
+        static let speakingStopButtonPadding: CGFloat = 2
+        static let speakingStopIconMinSize: CGFloat = 7
+        static let speakingStopIconMaxSize: CGFloat = 10
     }
 
     private enum WaveformMode {
@@ -53,8 +55,9 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
     private var errorLabel: NSTextField?
     private var dismissErrorButton: NSButton?
 
-    private var dividerLayer: CALayer?
+    private var leftSectionLayer: CALayer?
     private var rightSectionLayer: CALayer?
+    private var readStopButtonLayer: CALayer?
     private var readStopIconLayer: CALayer?
 
     private var currentState: RecorderState = .idle
@@ -122,7 +125,9 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
             return panel
         }
 
-        let frame = NSRect(x: 0, y: 0, width: Metrics.collapsedWidth, height: Metrics.collapsedHeight)
+        let initialWidth = Metrics.leftSectionWidth + Metrics.sectionGap + Metrics.rightSectionWidth
+        let initialHeight = max(Metrics.leftSectionHeight, Metrics.rightSectionHeight)
+        let frame = NSRect(x: 0, y: 0, width: initialWidth, height: initialHeight)
         let panel = NSPanel(
             contentRect: frame,
             styleMask: [.nonactivatingPanel, .borderless],
@@ -145,29 +150,19 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
 
         let container = NSView(frame: frame)
         container.wantsLayer = true
-        container.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.56).cgColor
-        container.layer?.borderColor = NSColor.white.withAlphaComponent(0.56).cgColor
-        container.layer?.borderWidth = 1
-        container.layer?.cornerRadius = Metrics.collapsedHeight / 2
-        container.layer?.masksToBounds = true
+        container.layer?.backgroundColor = NSColor.clear.cgColor
+        container.layer?.borderColor = NSColor.clear.cgColor
+        container.layer?.borderWidth = 0
+        container.layer?.cornerRadius = 0
+        container.layer?.masksToBounds = false
 
         let dictationHitArea = makeHitAreaButton(action: #selector(handleMicTap))
         let readButton = makeHitAreaButton(action: #selector(handleReadTap))
         let dismissErrorButton = makeDismissErrorButton(action: #selector(handleDismissErrorTap))
         readButton.wantsLayer = true
-
-        let readStopIconLayer = CALayer()
-        readStopIconLayer.backgroundColor = NSColor.white.withAlphaComponent(0.96).cgColor
-        readStopIconLayer.cornerRadius = 1
-        readStopIconLayer.isHidden = true
-        readStopIconLayer.actions = [
-            "position": NSNull(),
-            "bounds": NSNull(),
-            "frame": NSNull(),
-            "hidden": NSNull(),
-            "opacity": NSNull()
-        ]
-        readButton.layer?.addSublayer(readStopIconLayer)
+        readButton.layer?.backgroundColor = NSColor.clear.cgColor
+        readButton.layer?.borderColor = NSColor.clear.cgColor
+        readButton.layer?.borderWidth = 0
 
         let waveformView = ActivityWaveformView(frame: .zero)
         waveformView.wantsLayer = true
@@ -185,14 +180,45 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
         let rightSectionLayer = CALayer()
         rightSectionLayer.backgroundColor = NSColor.white.withAlphaComponent(0.04).cgColor
         if #available(macOS 10.13, *) {
-            rightSectionLayer.maskedCorners = [.layerMaxXMinYCorner, .layerMaxXMaxYCorner]
+            rightSectionLayer.maskedCorners = [
+                .layerMinXMinYCorner,
+                .layerMinXMaxYCorner,
+                .layerMaxXMinYCorner,
+                .layerMaxXMaxYCorner
+            ]
         }
 
-        let dividerLayer = CALayer()
-        dividerLayer.backgroundColor = NSColor.white.withAlphaComponent(0.22).cgColor
+        let leftSectionLayer = CALayer()
+        leftSectionLayer.backgroundColor = NSColor.black.withAlphaComponent(0.56).cgColor
+        leftSectionLayer.borderColor = NSColor.white.withAlphaComponent(0.56).cgColor
+        leftSectionLayer.borderWidth = 1
 
+        let readStopButtonLayer = CALayer()
+        readStopButtonLayer.backgroundColor = NSColor.white.withAlphaComponent(0.22).cgColor
+        readStopButtonLayer.borderColor = NSColor.clear.cgColor
+        readStopButtonLayer.borderWidth = 0
+        readStopButtonLayer.isHidden = true
+        readStopButtonLayer.actions = [
+            "position": NSNull(),
+            "bounds": NSNull(),
+            "frame": NSNull(),
+            "hidden": NSNull(),
+            "opacity": NSNull()
+        ]
+
+        let readStopIconLayer = CALayer()
+        readStopIconLayer.backgroundColor = NSColor.white.withAlphaComponent(0.96).cgColor
+        readStopIconLayer.cornerRadius = 1
+        readStopIconLayer.actions = [
+            "position": NSNull(),
+            "bounds": NSNull(),
+            "frame": NSNull()
+        ]
+        readStopButtonLayer.addSublayer(readStopIconLayer)
+        readButton.layer?.addSublayer(readStopButtonLayer)
+
+        container.layer?.addSublayer(leftSectionLayer)
         container.layer?.addSublayer(rightSectionLayer)
-        container.layer?.addSublayer(dividerLayer)
         container.addSubview(dictationHitArea)
         container.addSubview(readButton)
         container.addSubview(waveformView)
@@ -207,8 +233,9 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
         self.waveformView = waveformView
         self.errorLabel = errorLabel
         self.dismissErrorButton = dismissErrorButton
+        self.leftSectionLayer = leftSectionLayer
         self.rightSectionLayer = rightSectionLayer
-        self.dividerLayer = dividerLayer
+        self.readStopButtonLayer = readStopButtonLayer
         self.readStopIconLayer = readStopIconLayer
 
         configureHoverHandlers()
@@ -339,39 +366,67 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
             return
         }
 
+        let isSpeaking = currentState == .speaking
+        let leftSectionWidth = Metrics.leftSectionWidth
+        let leftSectionHeight = Metrics.leftSectionHeight
+        let rightSectionWidth = isSpeaking ? Metrics.speakingRightSectionWidth : Metrics.rightSectionWidth
+        let rightSectionHeight = isSpeaking ? Metrics.speakingRightSectionHeight : Metrics.rightSectionHeight
+        let gap = Metrics.sectionGap
+        let nonErrorWidth = leftSectionWidth + gap + rightSectionWidth
+        let nonErrorHeight = max(leftSectionHeight, rightSectionHeight)
         let errorLayout = errorMessage.map { makeErrorLayout(for: $0, in: panel, label: errorLabel) }
-        let nonErrorWidth = (currentState == .speaking) ? Metrics.speakingWidth : Metrics.collapsedWidth
-        let rightSectionWidth = (currentState == .speaking) ? Metrics.speakingRightSectionWidth : Metrics.rightSectionWidth
         let width = errorLayout?.width ?? nonErrorWidth
-        let height = errorLayout?.height ?? Metrics.collapsedHeight
-        let rightSectionX = width - rightSectionWidth
+        let height = errorLayout?.height ?? nonErrorHeight
         let isErrorExpanded = errorLayout != nil
+        let leftSectionY = floor((height - leftSectionHeight) / 2)
+        let rightSectionX = leftSectionWidth + gap
+        let rightSectionY = floor((height - rightSectionHeight) / 2)
 
         panel.setContentSize(NSSize(width: width, height: height))
         container.frame = NSRect(x: 0, y: 0, width: width, height: height)
-        container.layer?.cornerRadius = isErrorExpanded ? Metrics.errorCornerRadius : (height / 2)
+        container.layer?.cornerRadius = isErrorExpanded ? Metrics.errorCornerRadius : 0
+        leftSectionLayer?.isHidden = isErrorExpanded
         updateContainerAppearance(isErrorExpanded: isErrorExpanded)
 
         dictationHitArea.isHidden = isErrorExpanded
         readButton.isHidden = isErrorExpanded
         dismissErrorButton.isHidden = !isErrorExpanded
         rightSectionLayer?.isHidden = isErrorExpanded
-        dividerLayer?.isHidden = isErrorExpanded
 
         if !isErrorExpanded {
-            rightSectionLayer?.frame = NSRect(x: rightSectionX, y: 0, width: rightSectionWidth, height: height)
-            rightSectionLayer?.cornerRadius = height / 2
-            dividerLayer?.frame = NSRect(
-                x: rightSectionX,
-                y: Metrics.dividerInset,
-                width: 1,
-                height: height - (Metrics.dividerInset * 2)
+            leftSectionLayer?.frame = NSRect(
+                x: 0,
+                y: leftSectionY,
+                width: leftSectionWidth,
+                height: leftSectionHeight
             )
-            dictationHitArea.frame = NSRect(x: 0, y: 0, width: rightSectionX, height: height)
-            readButton.frame = NSRect(x: rightSectionX, y: 0, width: rightSectionWidth, height: height)
-            updateReadStopIcon(isSpeaking: currentState == .speaking, buttonBounds: readButton.bounds, height: height)
+            leftSectionLayer?.cornerRadius = leftSectionHeight / 2
+            rightSectionLayer?.frame = NSRect(
+                x: rightSectionX,
+                y: rightSectionY,
+                width: rightSectionWidth,
+                height: rightSectionHeight
+            )
+            rightSectionLayer?.cornerRadius = rightSectionHeight / 2
+            dictationHitArea.frame = NSRect(
+                x: 0,
+                y: leftSectionY,
+                width: leftSectionWidth,
+                height: leftSectionHeight
+            )
+            readButton.frame = NSRect(
+                x: rightSectionX,
+                y: rightSectionY,
+                width: rightSectionWidth,
+                height: rightSectionHeight
+            )
+            updateReadStopButtonAppearance(
+                isSpeaking: isSpeaking,
+                buttonBounds: readButton.bounds,
+                height: rightSectionHeight
+            )
         } else {
-            updateReadStopIcon(isSpeaking: false, buttonBounds: .zero, height: height)
+            updateReadStopButtonAppearance(isSpeaking: false, buttonBounds: .zero, height: height)
         }
 
         if let errorMessage, let errorLayout {
@@ -386,9 +441,9 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
             errorLabel.stringValue = ""
             waveformView.frame = NSRect(
                 x: Metrics.horizontalPadding,
-                y: 2,
-                width: max(0, rightSectionX - (Metrics.horizontalPadding * 2)),
-                height: height - 4
+                y: leftSectionY + 2,
+                width: max(0, leftSectionWidth - (Metrics.horizontalPadding * 2)),
+                height: max(0, leftSectionHeight - 4)
             )
         }
 
@@ -404,12 +459,19 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
             layer.backgroundColor = NSColor.systemRed.withAlphaComponent(0.33).cgColor
             layer.borderColor = NSColor.systemRed.withAlphaComponent(0.88).cgColor
             layer.borderWidth = 1.2
+            layer.masksToBounds = true
             return
         }
 
-        layer.backgroundColor = NSColor.black.withAlphaComponent(0.56).cgColor
-        layer.borderColor = NSColor.white.withAlphaComponent(0.56).cgColor
-        layer.borderWidth = 1
+        layer.backgroundColor = NSColor.clear.cgColor
+        layer.borderColor = NSColor.clear.cgColor
+        layer.borderWidth = 0
+        layer.masksToBounds = false
+        leftSectionLayer?.backgroundColor = NSColor.black.withAlphaComponent(0.56).cgColor
+        leftSectionLayer?.borderColor = NSColor.white.withAlphaComponent(0.56).cgColor
+        leftSectionLayer?.borderWidth = 1
+        rightSectionLayer?.borderColor = NSColor.white.withAlphaComponent(0.56).cgColor
+        rightSectionLayer?.borderWidth = 1
     }
 
     private func makeErrorLayout(for message: String, in panel: NSPanel, label: NSTextField) -> ErrorLayoutMetrics {
@@ -461,25 +523,46 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
         )
     }
 
-    private func updateReadStopIcon(isSpeaking: Bool, buttonBounds: NSRect, height: CGFloat) {
-        guard let readStopIconLayer else {
+    private func updateReadStopButtonAppearance(isSpeaking: Bool, buttonBounds: NSRect, height: CGFloat) {
+        guard let readButton, let readStopButtonLayer, let readStopIconLayer else {
             return
         }
+
+        readButton.title = ""
+        readButton.attributedTitle = NSAttributedString(string: "")
+        readButton.layer?.backgroundColor = NSColor.clear.cgColor
+        readButton.layer?.borderColor = NSColor.clear.cgColor
+        readButton.layer?.borderWidth = 0
+        readButton.layer?.cornerRadius = 0
 
         guard isSpeaking else {
-            readStopIconLayer.isHidden = true
+            readStopButtonLayer.isHidden = true
             return
         }
 
+        let padding = Metrics.speakingStopButtonPadding
+        let stopButtonFrame = buttonBounds.insetBy(dx: padding, dy: padding)
+        guard stopButtonFrame.width > 0, stopButtonFrame.height > 0 else {
+            readStopButtonLayer.isHidden = true
+            return
+        }
+
+        readStopButtonLayer.frame = stopButtonFrame
+        readStopButtonLayer.cornerRadius = min(stopButtonFrame.width, stopButtonFrame.height) / 2
+        readStopButtonLayer.isHidden = false
+
+        let maxIconByBounds = max(0, min(stopButtonFrame.width, stopButtonFrame.height) - 2)
         let iconSize = min(
-            Metrics.speakingStopIconMaxSize,
-            max(Metrics.speakingStopIconMinSize, height - 3)
+            maxIconByBounds,
+            max(
+                Metrics.speakingStopIconMinSize,
+                min(Metrics.speakingStopIconMaxSize, (height * 0.5))
+            )
         )
-        let iconX = buttonBounds.minX + ((buttonBounds.width - iconSize) / 2)
-        let iconY = buttonBounds.minY + ((buttonBounds.height - iconSize) / 2)
+        let iconX = (stopButtonFrame.width - iconSize) / 2
+        let iconY = (stopButtonFrame.height - iconSize) / 2
         readStopIconLayer.frame = NSRect(x: iconX, y: iconY, width: iconSize, height: iconSize)
-        readStopIconLayer.cornerRadius = max(0.8, iconSize * 0.18)
-        readStopIconLayer.isHidden = false
+        readStopIconLayer.cornerRadius = max(0.8, iconSize * 0.2)
     }
 
     private func positionPanel(
@@ -692,11 +775,11 @@ public final class FloatingBarWindowManager: NSObject, FloatingBarManaging {
         let alpha: CGFloat
         switch state {
         case .speaking:
-            alpha = 0.14
+            alpha = 0.2
         case .listening, .transcribing, .injecting:
-            alpha = 0.04
+            alpha = 0.06
         case .idle, .error:
-            alpha = hasSelectedText ? 0.1 : 0.04
+            alpha = hasSelectedText ? 0.12 : 0.06
         }
         rightSectionLayer?.backgroundColor = NSColor.white.withAlphaComponent(alpha).cgColor
     }
@@ -949,6 +1032,11 @@ private final class FloatingHoverTooltip {
 }
 
 private final class ActivityWaveformView: NSView {
+    private enum Metrics {
+        static let silenceFloor: CGFloat = 0.05
+        static let minimumVisibleLevel: CGFloat = 0.02
+    }
+
     enum Mode {
         case listening
         case processing
@@ -965,7 +1053,10 @@ private final class ActivityWaveformView: NSView {
     private var animationTimer: Timer?
 
     func setLevel(_ level: CGFloat) {
-        currentLevel = min(max(level, 0), 1)
+        let clamped = min(max(level, 0), 1)
+        let gated = max(0, (clamped - Metrics.silenceFloor) / (1 - Metrics.silenceFloor))
+        let smoothing: CGFloat = gated > currentLevel ? 0.42 : 0.18
+        currentLevel = currentLevel + ((gated - currentLevel) * smoothing)
         needsDisplay = true
     }
 
@@ -1003,7 +1094,8 @@ private final class ActivityWaveformView: NSView {
     }
 
     private func tick() {
-        phase += 0.34
+        let phaseStep: CGFloat = mode == .processing ? 0.34 : 0.12
+        phase += phaseStep
         if phase > (.pi * 2) {
             phase -= (.pi * 2)
         }
@@ -1031,30 +1123,36 @@ private final class ActivityWaveformView: NSView {
         let step = rect.width / CGFloat(barCount)
         let barWidth = max(1.2, min(2.1, step * 0.48))
 
-        let activityBase: CGFloat
-        switch mode {
-        case .listening:
-            activityBase = 0.2 + (currentLevel * 0.8)
-        case .processing:
-            activityBase = 0.5
+        if mode == .listening && currentLevel <= Metrics.minimumVisibleLevel {
+            return
         }
 
         for index in 0..<barCount {
             let t = CGFloat(index) / CGFloat(max(barCount - 1, 1))
             let distanceFromCenter = abs((t * 2) - 1)
-            let envelope = max(0, 1 - (distanceFromCenter * 1.25))
-            let wave = abs(sin(phase + (CGFloat(index) * 0.61)))
-            let pulse = abs(sin((phase * 0.72) + (CGFloat(index) * 0.23)))
-            let dynamic: CGFloat = mode == .processing ? pulse : wave
-            let amplitude = (1.2 + (rect.height * 0.72 * activityBase * dynamic)) * max(0.18, envelope)
-            let barHeight = max(1.8, min(rect.height - 1.5, amplitude))
+            let envelope = max(0.08, 1 - (distanceFromCenter * 1.2))
+            let barHeight: CGFloat
+            let brightness: CGFloat
+
+            switch mode {
+            case .listening:
+                let level = pow(currentLevel, 0.8)
+                let contour = 0.85 + (0.15 * abs(sin((CGFloat(index) * 0.35) + phase)))
+                let amplitude = (rect.height - 1.6) * level * envelope * contour
+                barHeight = max(1.2, min(rect.height - 1.4, amplitude))
+                brightness = 0.78 + (0.22 * min(1, level + (envelope * 0.2)))
+            case .processing:
+                let pulse = abs(sin((phase * 0.72) + (CGFloat(index) * 0.23)))
+                let amplitude = (1.2 + (rect.height * 0.72 * 0.5 * pulse)) * envelope
+                barHeight = max(1.8, min(rect.height - 1.5, amplitude))
+                brightness = 0.72 + (0.28 * pulse)
+            }
 
             let x = rect.minX + (step * CGFloat(index)) + ((step - barWidth) / 2)
             let y = baselineY - (barHeight / 2)
             let barRect = NSRect(x: x, y: y, width: barWidth, height: barHeight)
             let path = NSBezierPath(roundedRect: barRect, xRadius: barWidth / 2, yRadius: barWidth / 2)
 
-            let brightness = 0.72 + (0.28 * dynamic)
             NSColor.white.withAlphaComponent(brightness).setFill()
             path.fill()
         }
