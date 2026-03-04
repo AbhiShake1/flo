@@ -35,7 +35,7 @@ public struct ModelsDevProviderEntry: Codable, Hashable, Sendable {
         guard let encodedID = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
             return nil
         }
-        return URL(string: "https://models.dev/logos/\(encodedID).png")
+        return URL(string: "https://models.dev/logos/\(encodedID).svg")
     }
 }
 
