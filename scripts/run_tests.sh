@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-swift test --enable-xctest --enable-swift-testing "$@"
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+TARGET="$ROOT_DIR/apps/macos/scripts/run_tests.sh"
+
+if [[ ! -x "$TARGET" ]]; then
+  echo "Missing target script: $TARGET"
+  exit 1
+fi
+
+exec "$TARGET" "$@"
