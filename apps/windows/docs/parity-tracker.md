@@ -13,9 +13,9 @@ Status legend: `Not Started`, `In Progress`, `Parity`, `Exception`.
 | P2 | Controller/provider behavior parity | Engineer A | In Progress | Deterministic auth/routing/failover tests passing; credential/auth/permission orchestration now covered; action-by-action parity mapping still in progress. |
 | P3 | Platform core I/O parity | Engineer B | In Progress | Deterministic unit matrix for hotkeys/audio/selection/injection/elevation is green; Win32 adapter wiring into app harness is pending. |
 | P4 | Security/persistence parity | Engineer B | In Progress | Credential Manager + DPAPI backends and encrypted history lifecycle (retention + corruption recovery) are implemented with deterministic tests; Win32 runtime validation pending. |
-| P5 | Native Win32 UI parity | Engineer C | Not Started | Side-by-side chip/settings/onboarding parity at 100/125/150 DPI. |
-| P6 | Packaging + update paths | Engineer C | Not Started | ZIP install/upgrade/rollback + updater checksum paths pass. |
-| P7 | End-to-end parity hardening | All | Not Started | Full parity matrix green, no open exceptions. |
+| P5 | Native Win32 UI parity | Engineer C | In Progress | Token/motion/interaction parity model now has deterministic DPI coverage in `flo-ui-win32`; real Win32 shell rendering and side-by-side capture pending. |
+| P6 | Packaging + update paths | Engineer C | In Progress | Feed parsing, checksum validation, staged apply + rollback pointer, ZIP packaging script, and MSIX/winget prep script are implemented; signing-gated GA validation pending. |
+| P7 | End-to-end parity hardening | All | In Progress | Acceptance scenarios (dictation/read-selected/elevation/permissions/live-finalization/failover) are automated in `flo-app`; real app matrix and Windows runtime fault injection still pending. |
 | P8 | Release readiness + soak | All + QA | Not Started | 48h soak complete and launch checklist signed. |
 
 ## Gate tracker (release blockers)
@@ -23,7 +23,7 @@ Status legend: `Not Started`, `In Progress`, `Parity`, `Exception`.
 | Gate | Rule | Current state | Evidence |
 |---|---|---|---|
 | Functional gate | Every row in `04-controller-action-ledger.md` has passing automated or scripted evidence. | In Progress | Action ledger no longer has `Not Started` rows; rows are actively mapped with tests and pending parity signoff. |
-| Visual gate | Every row in `05-ui-parity-spec.md` passes side-by-side review at 100/125/150 DPI. | Not Started | Chip tokens locked; full-surface capture pending. |
+| Visual gate | Every row in `05-ui-parity-spec.md` passes side-by-side review at 100/125/150 DPI. | In Progress | Chip geometry/motion tokens now have deterministic DPI tests in `flo-ui-win32`; side-by-side screenshots for all surfaces pending. |
 | Error gate | User-facing errors exactly match `06-error-message-parity.md` text and triggers. | In Progress | Canonical table created; enforcement wiring pending. |
 | Elevation gate | Privileged target flow prompts, relaunches, retries, and succeeds without silent failure. | In Progress | Elevation integrity/relaunch decision helpers are implemented and unit-tested; Win32 relaunch wiring still pending. |
 | Release gate | No tracker row may remain `Not Started`, `In Progress`, or `Exception`. | Not Met | Pre-release state. |

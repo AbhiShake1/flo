@@ -70,3 +70,5 @@ The platform-neutral key model remains `flo_domain::keys::LogicalKey`.
 - Selection/injection/elevation contracts include deterministic unit coverage for fallback, typed failure mapping, and relaunch decision behavior.
 - Hotkey and audio contracts include deterministic conflict/hold semantics plus capture-playback interruption behavior coverage.
 - Security/persistence contracts include Credential Manager secret storage, DPAPI protect/unprotect, encrypted history key workflow, retention caps, and corruption quarantine behavior.
+- UI shell contracts include token-accurate chip geometry, motion timings, interaction states, and DPI scaling invariants at 100%/125%/150%.
+- Packaging contracts include ZIP build automation plus MSIX/winget manifest generation with signing-gated GA enforcement.

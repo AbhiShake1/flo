@@ -21,6 +21,9 @@
 - Started P3 platform parity implementation with deterministic unit-tested selection fallback telemetry, injection preflight/send path checks, and elevation decision helpers.
 - Added deterministic hotkey conflict/hold-release semantics and audio capture-playback interruption coordinators in `flo-platform-win`.
 - Started P4 security/persistence implementation with Credential Manager + DPAPI backend wiring and encrypted history store lifecycle (retention caps + corruption quarantine + key regeneration).
+- Added P5 token-accurate `flo-ui-win32` chip geometry/interaction/motion model with 100/125/150 DPI tests.
+- Added P6 updater hardening (feed parsing, staged apply metadata, rollback pointer) and release scripts for ZIP packaging + MSIX/winget prep with signing gate.
+- Added automated acceptance scenario tests (A1-A6) in `flo-app` as P7 hardening baseline.
 
 ## Blockers
 - None for scaffold stage.
