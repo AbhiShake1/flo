@@ -30,6 +30,7 @@
 - Added release-readiness artifacts: `07-release-readiness-checklist.md`, `scripts/verify-parity-gates.sh`, and `scripts/release-readiness.sh`.
 - Added deterministic runtime fault-injection tests for OAuth, speech capture start/stop, TTS failures, and empty capture behavior in `flo-app`.
 - Marked all controller action ledger rows as `Parity` based on existing deterministic reducer/query/provider evidence and updated functional gate status accordingly.
+- Marked P0 spec-freeze milestone as `Parity` in the tracker now that governance artifacts are in place and wired into gate scripts.
 
 ## Blockers
 - None for scaffold stage.

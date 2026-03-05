@@ -8,7 +8,7 @@ Status legend: `Not Started`, `In Progress`, `Parity`, `Exception`.
 
 | Milestone | Scope | Owner | Status | Exit criteria |
 |---|---|---|---|---|
-| P0 | Spec freeze and macOS baseline capture | All | In Progress | `04`, `05`, `06` docs locked and signed. |
+| P0 | Spec freeze and macOS baseline capture | All | Parity | `04`, `05`, `06` docs exist as locked parity artifacts for implementation and gate checks. |
 | P1 | Domain/core/provider/platform contract freeze + reducer harness | Core/Provider | Parity | Contract APIs frozen; reducer coverage spans auth/permissions/shortcuts/dictation/history/voice/routing categories. |
 | P2 | Controller/provider behavior parity | Engineer A | Parity | Deterministic auth/routing/failover tests are passing and the action ledger rows are mapped to parity-backed reducer/query/provider coverage. |
 | P3 | Platform core I/O parity | Engineer B | In Progress | Deterministic unit matrix for hotkeys/audio/selection/injection/elevation is green and app runtime harness wiring is in place; native Windows app-matrix validation is pending. |
