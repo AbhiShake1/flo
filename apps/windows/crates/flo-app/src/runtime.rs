@@ -1,14 +1,14 @@
 use std::{
     collections::VecDeque,
     fs,
-    path::{Path, PathBuf},
+    path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use flo_core::{
     controller::{ControllerEffect, ControllerEvent, FloController},
     ports::{
-        AuthService, AuthStateSink, CoreError, DictationPreferencesStore, ElevationPromptOutcome,
+        AuthService, AuthStateSink, DictationPreferencesStore, ElevationPromptOutcome,
         ElevationService, FloatingBarChipModel, FloatingBarManaging, PermissionsService,
         SelectionReaderService, SpeechCaptureService, TTSService, TextInjectionService,
         VoicePreferencesStore,
@@ -323,6 +323,7 @@ fn now_unix_ms() -> i64 {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
 
     use async_trait::async_trait;
@@ -330,8 +331,9 @@ mod tests {
         capabilities::PlatformCapabilities,
         controller::FloCommand,
         ports::{
-            AuthService, AuthStateSink, CoreResult, DictationPreferencesStore, FloatingBarActions,
-            PermissionSettingsTarget, SpeechCaptureService, TTSService, VoicePreferencesStore,
+            AuthService, AuthStateSink, CoreError, CoreResult, DictationPreferencesStore,
+            FloatingBarActions, PermissionSettingsTarget, SpeechCaptureService, TTSService,
+            VoicePreferencesStore,
         },
     };
     use flo_domain::{
