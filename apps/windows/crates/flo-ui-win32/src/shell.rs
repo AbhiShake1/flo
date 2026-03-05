@@ -54,6 +54,39 @@ pub struct ShellLayoutTokens {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SettingsLayoutTokens {
+    pub sidebar_width_px: i32,
+    pub content_horizontal_padding_px: i32,
+    pub content_vertical_padding_px: i32,
+    pub section_header_height_px: i32,
+    pub control_height_px: i32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OnboardingLayoutTokens {
+    pub stage_width_px: i32,
+    pub stage_min_height_px: i32,
+    pub card_corner_radius_px: i32,
+    pub stage_gap_px: i32,
+    pub primary_button_height_px: i32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HistoryProviderLayoutTokens {
+    pub row_height_px: i32,
+    pub header_height_px: i32,
+    pub icon_size_px: i32,
+    pub notice_min_height_px: i32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShellMotionTokens {
+    pub onboarding_stage_transition_ms: u64,
+    pub settings_route_transition_ms: u64,
+    pub tray_menu_open_ms: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ShellAccessibilityLabels {
     pub tray_icon_name: &'static str,
     pub settings_window_name: &'static str,
@@ -81,6 +114,43 @@ pub fn shell_layout_tokens(dpi_scale: f32) -> ShellLayoutTokens {
         tray_row_height_px: scale(30.0, dpi_scale),
         section_gap_px: scale(10.0, dpi_scale),
         horizontal_padding_px: scale(12.0, dpi_scale),
+    }
+}
+
+pub fn settings_layout_tokens(dpi_scale: f32) -> SettingsLayoutTokens {
+    SettingsLayoutTokens {
+        sidebar_width_px: scale(228.0, dpi_scale),
+        content_horizontal_padding_px: scale(20.0, dpi_scale),
+        content_vertical_padding_px: scale(18.0, dpi_scale),
+        section_header_height_px: scale(34.0, dpi_scale),
+        control_height_px: scale(32.0, dpi_scale),
+    }
+}
+
+pub fn onboarding_layout_tokens(dpi_scale: f32) -> OnboardingLayoutTokens {
+    OnboardingLayoutTokens {
+        stage_width_px: scale(860.0, dpi_scale),
+        stage_min_height_px: scale(560.0, dpi_scale),
+        card_corner_radius_px: scale(16.0, dpi_scale),
+        stage_gap_px: scale(18.0, dpi_scale),
+        primary_button_height_px: scale(40.0, dpi_scale),
+    }
+}
+
+pub fn history_provider_layout_tokens(dpi_scale: f32) -> HistoryProviderLayoutTokens {
+    HistoryProviderLayoutTokens {
+        row_height_px: scale(34.0, dpi_scale),
+        header_height_px: scale(36.0, dpi_scale),
+        icon_size_px: scale(18.0, dpi_scale),
+        notice_min_height_px: scale(52.0, dpi_scale),
+    }
+}
+
+pub const fn shell_motion_tokens() -> ShellMotionTokens {
+    ShellMotionTokens {
+        onboarding_stage_transition_ms: 220,
+        settings_route_transition_ms: 180,
+        tray_menu_open_ms: 120,
     }
 }
 
@@ -266,6 +336,43 @@ mod tests {
         assert_eq!(at_100.tray_row_height_px, 30);
         assert_eq!(at_125.tray_row_height_px, 38);
         assert_eq!(at_150.tray_row_height_px, 45);
+    }
+
+    #[test]
+    fn settings_and_onboarding_tokens_scale_consistently() {
+        let settings_100 = settings_layout_tokens(1.0);
+        let settings_125 = settings_layout_tokens(1.25);
+        let onboarding_100 = onboarding_layout_tokens(1.0);
+        let onboarding_150 = onboarding_layout_tokens(1.5);
+
+        assert_eq!(settings_100.sidebar_width_px, 228);
+        assert_eq!(settings_125.sidebar_width_px, 285);
+        assert_eq!(settings_100.control_height_px, 32);
+        assert_eq!(settings_125.control_height_px, 40);
+
+        assert_eq!(onboarding_100.stage_width_px, 860);
+        assert_eq!(onboarding_150.stage_width_px, 1290);
+        assert_eq!(onboarding_100.primary_button_height_px, 40);
+        assert_eq!(onboarding_150.primary_button_height_px, 60);
+    }
+
+    #[test]
+    fn history_provider_tokens_scale_consistently() {
+        let at_100 = history_provider_layout_tokens(1.0);
+        let at_125 = history_provider_layout_tokens(1.25);
+
+        assert_eq!(at_100.row_height_px, 34);
+        assert_eq!(at_125.row_height_px, 43);
+        assert_eq!(at_100.notice_min_height_px, 52);
+        assert_eq!(at_125.notice_min_height_px, 65);
+    }
+
+    #[test]
+    fn shell_motion_tokens_match_ui_spec_contract() {
+        let motion = shell_motion_tokens();
+        assert_eq!(motion.onboarding_stage_transition_ms, 220);
+        assert_eq!(motion.settings_route_transition_ms, 180);
+        assert_eq!(motion.tray_menu_open_ms, 120);
     }
 
     #[test]

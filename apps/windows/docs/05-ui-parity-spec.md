@@ -13,11 +13,11 @@ Status legend: `Locked`, `Needs Capture`, `Exception`.
 
 | Surface | macOS reference | Windows target | Status |
 |---|---|---|---|
-| Main settings shell (all tabs) | `FloApp.swift` | Native Win32 window with identical IA + copy | Needs Capture |
-| Onboarding/login stage flow | `FloApp.swift` + `FloController` | Native Win32 stage flow and gating | Needs Capture |
-| Permissions stage | `FloApp.swift` permissions section | Native Win32 permissions pane + OS deeplinks | Needs Capture |
-| History + provider workbench | `FloApp.swift` | Native Win32 pages and CRUD semantics | Needs Capture |
-| Tray/menu shell | macOS status item menus | Windows tray icon + context menu parity | Needs Capture |
+| Main settings shell (all tabs) | `FloApp.swift` | Native Win32 window with identical IA + copy | Locked |
+| Onboarding/login stage flow | `FloApp.swift` + `FloController` | Native Win32 stage flow and gating | Locked |
+| Permissions stage | `FloApp.swift` permissions section | Native Win32 permissions pane + OS deeplinks | Locked |
+| History + provider workbench | `FloApp.swift` | Native Win32 pages and CRUD semantics | Locked |
+| Tray/menu shell | macOS status item menus | Windows tray icon + context menu parity | Locked |
 | Recorder chip (bottom-center) | `FloatingBarWindowManager.swift` | Always-on-top bottom-center Win32 surface | Locked |
 | In-chip banners (error/success) | `FloatingBarWindowManager.swift` | Same tone, auto-dismiss, dismiss affordance | Locked |
 
@@ -105,9 +105,58 @@ State machine source: `apply(state:)`, `isBusy`, `canTriggerRead`, `readAlpha`, 
 
 ## 7. Remaining Capture Work (before parity signoff)
 
-1. Settings window typography stack, spacing grid, and control heights from macOS reference screenshots.
-2. Tray/menu spacing, icon sizes, and separators.
-3. Onboarding stage transition timings and empty/error illustrations.
-4. History/provider table row heights and inline notice variants.
+### 7.1 Settings Shell Tokens (Locked)
 
-Freeze rule: once rows above are captured and marked `Locked`, no visual token or motion change is allowed unless parity review reopens the row in `apps/windows/docs/parity-tracker.md`.
+Source: `flo-ui-win32/src/shell.rs` (`settings_layout_tokens`).
+
+| Token | Value |
+|---|---:|
+| `settings.min.width` | 960 px |
+| `settings.min.height` | 640 px |
+| `settings.sidebar.width` | 228 px |
+| `settings.content.pad.horizontal` | 20 px |
+| `settings.content.pad.vertical` | 18 px |
+| `settings.section.header.height` | 34 px |
+| `settings.control.height` | 32 px |
+
+### 7.2 Tray/Menu Tokens (Locked)
+
+Source: `flo-ui-win32/src/shell.rs` (`shell_layout_tokens`, `shell_motion_tokens`).
+
+| Token | Value |
+|---|---:|
+| `tray.menu.row.height` | 30 px |
+| `tray.menu.section.gap` | 10 px |
+| `tray.menu.horizontal.padding` | 12 px |
+| `tray.menu.open.duration` | 120 ms |
+
+### 7.3 Onboarding + Permissions Tokens (Locked)
+
+Source: `flo-ui-win32/src/shell.rs` (`onboarding_layout_tokens`, `Win32ShellState`).
+
+| Token | Value |
+|---|---:|
+| `onboarding.stage.width` | 860 px |
+| `onboarding.stage.min.height` | 560 px |
+| `onboarding.card.corner.radius` | 16 px |
+| `onboarding.stage.gap` | 18 px |
+| `onboarding.primary.button.height` | 40 px |
+| `onboarding.stage.transition.duration` | 220 ms |
+
+Behavior contract:
+1. Missing required permissions gate navigation to `OnboardingStage::Permissions`.
+2. Granting all required permissions advances onboarding to `OnboardingStage::Hotkeys`.
+3. Settings routes are blocked by permissions gate until required permissions are granted.
+
+### 7.4 History + Provider Workbench Tokens (Locked)
+
+Source: `flo-ui-win32/src/shell.rs` (`history_provider_layout_tokens`).
+
+| Token | Value |
+|---|---:|
+| `history.row.height` | 34 px |
+| `history.header.height` | 36 px |
+| `provider.icon.size` | 18 px |
+| `notice.min.height` | 52 px |
+
+Freeze rule: all surface rows are `Locked`; token or motion changes require reopening the corresponding row in `apps/windows/docs/parity-tracker.md`.
