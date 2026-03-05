@@ -22,6 +22,7 @@ pub struct ControllerState {
     pub status_message: Option<String>,
     pub last_selection_read_method: Option<SelectionReadMethod>,
     pub last_dictation_transcript: Option<String>,
+    pub is_voice_preview_in_progress: bool,
 }
 
 impl Default for ControllerState {
@@ -39,6 +40,7 @@ impl Default for ControllerState {
             status_message: None,
             last_selection_read_method: None,
             last_dictation_transcript: None,
+            is_voice_preview_in_progress: false,
         }
     }
 }
@@ -71,6 +73,12 @@ pub enum FloCommand {
     ReadSelectedTextFromHotkey,
     PreviewCurrentVoice,
     CompleteHotkeyConfirmation,
+    ReorderProvidersInFailoverOrder(Vec<String>),
+    AddProviderToFailoverOrder(String),
+    RemoveProviderFromFailoverOrder(String),
+    MoveProviderUpInFailoverOrder(String),
+    MoveProviderDownInFailoverOrder(String),
+    SetProviderEnabledInFailover { provider: String, enabled: bool },
     SetFailoverAllowCrossProviderFallback(bool),
     SetFailoverMaxAttempts(u32),
     SetFailoverFailureThreshold(u32),
@@ -134,6 +142,8 @@ pub enum ControllerEvent {
     Error(PlatformErrorCode),
     TtsCompleted,
     TtsCanceled,
+    VoicePreviewCompleted,
+    VoicePreviewCanceled,
 }
 
 #[derive(Debug, Default)]
@@ -312,10 +322,116 @@ impl FloController {
                     ControllerEffect::UpdateFloatingBar(FloatingBarState::Speaking),
                 ]
             }
-            FloCommand::PreviewCurrentVoice => vec![ControllerEffect::StartTts],
+            FloCommand::PreviewCurrentVoice => {
+                if self.state.is_voice_preview_in_progress
+                    || self.state.recorder_state != RecorderState::Idle
+                {
+                    self.state.status_message = Some(canonical_error_message(
+                        PlatformErrorCode::VoicePreviewBusy,
+                        None,
+                    ));
+                    return Vec::new();
+                }
+
+                self.state.is_voice_preview_in_progress = true;
+                self.state.recorder_state = RecorderState::Speaking;
+                self.state.status_message = Some("Playing voice preview...".to_string());
+                vec![
+                    ControllerEffect::ShowFloatingBar(FloatingBarState::Speaking),
+                    ControllerEffect::StartTts,
+                ]
+            }
             FloCommand::CompleteHotkeyConfirmation => {
                 self.state.status_message = Some("Hotkey onboarding confirmed.".to_string());
                 Vec::new()
+            }
+            FloCommand::ReorderProvidersInFailoverOrder(order) => {
+                self.state.provider_routing_overrides.provider_order =
+                    normalize_provider_order(order);
+                vec![ControllerEffect::PersistRoutingOverrides]
+            }
+            FloCommand::AddProviderToFailoverOrder(provider) => {
+                let normalized = normalize_provider_id(&provider);
+                if normalized.is_empty() {
+                    return Vec::new();
+                }
+                let mut order = normalize_provider_order(
+                    self.state.provider_routing_overrides.provider_order.clone(),
+                );
+                if !order.contains(&normalized) {
+                    order.push(normalized);
+                }
+                self.state.provider_routing_overrides.provider_order = order;
+                vec![ControllerEffect::PersistRoutingOverrides]
+            }
+            FloCommand::RemoveProviderFromFailoverOrder(provider) => {
+                let normalized = normalize_provider_id(&provider);
+                let mut order = normalize_provider_order(
+                    self.state.provider_routing_overrides.provider_order.clone(),
+                );
+                order.retain(|candidate| candidate != &normalized);
+                self.state.provider_routing_overrides.provider_order = order;
+                vec![ControllerEffect::PersistRoutingOverrides]
+            }
+            FloCommand::MoveProviderUpInFailoverOrder(provider) => {
+                let normalized = normalize_provider_id(&provider);
+                let mut order = normalize_provider_order(
+                    self.state.provider_routing_overrides.provider_order.clone(),
+                );
+                if let Some(index) = order.iter().position(|candidate| candidate == &normalized) {
+                    if index > 0 {
+                        order.swap(index, index - 1);
+                    }
+                }
+                self.state.provider_routing_overrides.provider_order = order;
+                vec![ControllerEffect::PersistRoutingOverrides]
+            }
+            FloCommand::MoveProviderDownInFailoverOrder(provider) => {
+                let normalized = normalize_provider_id(&provider);
+                let mut order = normalize_provider_order(
+                    self.state.provider_routing_overrides.provider_order.clone(),
+                );
+                if let Some(index) = order.iter().position(|candidate| candidate == &normalized) {
+                    if index + 1 < order.len() {
+                        order.swap(index, index + 1);
+                    }
+                }
+                self.state.provider_routing_overrides.provider_order = order;
+                vec![ControllerEffect::PersistRoutingOverrides]
+            }
+            FloCommand::SetProviderEnabledInFailover { provider, enabled } => {
+                let normalized = normalize_provider_id(&provider);
+                if normalized.is_empty() {
+                    return Vec::new();
+                }
+
+                let mut allowed = self
+                    .state
+                    .provider_routing_overrides
+                    .allowed_providers
+                    .clone()
+                    .unwrap_or_else(|| {
+                        normalize_provider_order(
+                            self.state.provider_routing_overrides.provider_order.clone(),
+                        )
+                    });
+                allowed = normalize_provider_order(allowed);
+
+                if enabled {
+                    if !allowed.contains(&normalized) {
+                        allowed.push(normalized);
+                    }
+                } else {
+                    allowed.retain(|candidate| candidate != &normalized);
+                }
+
+                self.state.provider_routing_overrides.allowed_providers = if allowed.is_empty() {
+                    None
+                } else {
+                    Some(allowed)
+                };
+
+                vec![ControllerEffect::PersistRoutingOverrides]
             }
             FloCommand::SetFailoverAllowCrossProviderFallback(enabled) => {
                 self.state
@@ -465,18 +581,48 @@ impl FloController {
             }
             ControllerEvent::TtsCompleted => {
                 self.state.recorder_state = RecorderState::Idle;
-                self.state.status_message.replace(canonical_error_message(
-                    PlatformErrorCode::ReadAloudCompleted,
-                    None,
-                ));
+                if self.state.is_voice_preview_in_progress {
+                    self.state.is_voice_preview_in_progress = false;
+                    self.state
+                        .status_message
+                        .replace("Voice preview completed.".to_string());
+                } else {
+                    self.state.status_message.replace(canonical_error_message(
+                        PlatformErrorCode::ReadAloudCompleted,
+                        None,
+                    ));
+                }
                 vec![ControllerEffect::HideFloatingBar]
             }
             ControllerEvent::TtsCanceled => {
                 self.state.recorder_state = RecorderState::Idle;
-                self.state.status_message.replace(canonical_error_message(
-                    PlatformErrorCode::ReadAloudCanceled,
-                    None,
-                ));
+                if self.state.is_voice_preview_in_progress {
+                    self.state.is_voice_preview_in_progress = false;
+                    self.state
+                        .status_message
+                        .replace("Voice preview canceled.".to_string());
+                } else {
+                    self.state.status_message.replace(canonical_error_message(
+                        PlatformErrorCode::ReadAloudCanceled,
+                        None,
+                    ));
+                }
+                vec![ControllerEffect::HideFloatingBar]
+            }
+            ControllerEvent::VoicePreviewCompleted => {
+                self.state.is_voice_preview_in_progress = false;
+                self.state.recorder_state = RecorderState::Idle;
+                self.state
+                    .status_message
+                    .replace("Voice preview completed.".to_string());
+                vec![ControllerEffect::HideFloatingBar]
+            }
+            ControllerEvent::VoicePreviewCanceled => {
+                self.state.is_voice_preview_in_progress = false;
+                self.state.recorder_state = RecorderState::Idle;
+                self.state
+                    .status_message
+                    .replace("Voice preview canceled.".to_string());
                 vec![ControllerEffect::HideFloatingBar]
             }
         }
@@ -594,6 +740,22 @@ fn rewrite_preset_display_name(preset: DictationRewritePreset) -> &'static str {
     }
 }
 
+fn normalize_provider_id(raw: &str) -> String {
+    raw.trim().to_ascii_lowercase()
+}
+
+fn normalize_provider_order(values: Vec<String>) -> Vec<String> {
+    let mut order = Vec::new();
+    for value in values {
+        let normalized = normalize_provider_id(&value);
+        if normalized.is_empty() || order.contains(&normalized) {
+            continue;
+        }
+        order.push(normalized);
+    }
+    order
+}
+
 pub fn canonical_error_message(code: PlatformErrorCode, detail: Option<&str>) -> String {
     match code {
         PlatformErrorCode::OAuthMissingConfiguration => {
@@ -668,8 +830,8 @@ fn normalize_transcript(input: &str) -> String {
 mod tests {
     use flo_domain::{
         AppIntegrityLevel, DictationBaseTone, DictationLiveFinalizationMode,
-        DictationRewritePreset, FloatingBarState, KeyCombo, LogicalKey, ShortcutAction,
-        ShortcutBinding, ShortcutModifiers,
+        DictationRewritePreset, FloatingBarState, KeyCombo, LogicalKey, RecorderState,
+        ShortcutAction, ShortcutBinding, ShortcutModifiers,
     };
 
     use super::{
@@ -915,6 +1077,114 @@ mod tests {
         assert_eq!(
             controller.state.status_message.as_deref(),
             Some("Applied Professional rewrite preset.")
+        );
+    }
+
+    #[test]
+    fn preview_current_voice_is_blocked_when_recorder_busy() {
+        let mut controller = FloController::new();
+        controller.state.recorder_state = RecorderState::Listening;
+
+        let effects = controller.dispatch(
+            FloCommand::PreviewCurrentVoice,
+            &PlatformCapabilities::win32_default(),
+        );
+
+        assert!(effects.is_empty());
+        assert_eq!(
+            controller.state.status_message.as_deref(),
+            Some("Wait for the current action to finish, then try voice preview again.")
+        );
+    }
+
+    #[test]
+    fn preview_current_voice_sets_preview_state_and_effects_when_idle() {
+        let mut controller = FloController::new();
+
+        let effects = controller.dispatch(
+            FloCommand::PreviewCurrentVoice,
+            &PlatformCapabilities::win32_default(),
+        );
+
+        assert_eq!(
+            effects,
+            vec![
+                ControllerEffect::ShowFloatingBar(FloatingBarState::Speaking),
+                ControllerEffect::StartTts,
+            ]
+        );
+        assert!(controller.state.is_voice_preview_in_progress);
+        assert_eq!(controller.state.recorder_state, RecorderState::Speaking);
+    }
+
+    #[test]
+    fn reorder_provider_failover_order_dedupes_and_normalizes() {
+        let mut controller = FloController::new();
+
+        let effects = controller.dispatch(
+            FloCommand::ReorderProvidersInFailoverOrder(vec![
+                " OpenAI ".to_string(),
+                "gemini".to_string(),
+                "openai".to_string(),
+            ]),
+            &PlatformCapabilities::win32_default(),
+        );
+
+        assert_eq!(effects, vec![ControllerEffect::PersistRoutingOverrides]);
+        assert_eq!(
+            controller.state.provider_routing_overrides.provider_order,
+            vec!["openai".to_string(), "gemini".to_string()]
+        );
+    }
+
+    #[test]
+    fn move_provider_up_and_down_adjusts_order() {
+        let mut controller = FloController::new();
+        controller.state.provider_routing_overrides.provider_order = vec![
+            "openai".to_string(),
+            "gemini".to_string(),
+            "anthropic".to_string(),
+        ];
+
+        controller.dispatch(
+            FloCommand::MoveProviderDownInFailoverOrder("openai".to_string()),
+            &PlatformCapabilities::win32_default(),
+        );
+        controller.dispatch(
+            FloCommand::MoveProviderUpInFailoverOrder("anthropic".to_string()),
+            &PlatformCapabilities::win32_default(),
+        );
+
+        assert_eq!(
+            controller.state.provider_routing_overrides.provider_order,
+            vec![
+                "gemini".to_string(),
+                "anthropic".to_string(),
+                "openai".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn set_provider_enabled_in_failover_updates_allowed_provider_list() {
+        let mut controller = FloController::new();
+        controller.state.provider_routing_overrides.provider_order =
+            vec!["openai".to_string(), "gemini".to_string()];
+
+        controller.dispatch(
+            FloCommand::SetProviderEnabledInFailover {
+                provider: "gemini".to_string(),
+                enabled: false,
+            },
+            &PlatformCapabilities::win32_default(),
+        );
+
+        assert_eq!(
+            controller
+                .state
+                .provider_routing_overrides
+                .allowed_providers,
+            Some(vec!["openai".to_string()])
         );
     }
 }

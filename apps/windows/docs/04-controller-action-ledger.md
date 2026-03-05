@@ -32,12 +32,12 @@ Status legend: `Not Started`, `In Progress`, `Parity`, `Exception`.
 | A24 | `providerEnabledForFailover(_ provider: AIProvider) -> Bool` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
 | A25 | `canMoveProviderUpInFailoverOrder(_ provider: AIProvider) -> Bool` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
 | A26 | `canMoveProviderDownInFailoverOrder(_ provider: AIProvider) -> Bool` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A27 | `moveProviderUpInFailoverOrder(_ provider: AIProvider)` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A28 | `moveProviderDownInFailoverOrder(_ provider: AIProvider)` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A29 | `reorderProvidersInFailoverOrder(_ providers: [AIProvider])` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A30 | `addProviderToFailoverOrder(_ provider: AIProvider)` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A31 | `removeProviderFromFailoverOrder(_ provider: AIProvider)` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A32 | `setProviderEnabledInFailover(_ provider: AIProvider, enabled: Bool)` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
+| A27 | `moveProviderUpInFailoverOrder(_ provider: AIProvider)` | `FloCommand::MoveProviderUpInFailoverOrder` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A28 | `moveProviderDownInFailoverOrder(_ provider: AIProvider)` | `FloCommand::MoveProviderDownInFailoverOrder` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A29 | `reorderProvidersInFailoverOrder(_ providers: [AIProvider])` | `FloCommand::ReorderProvidersInFailoverOrder` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A30 | `addProviderToFailoverOrder(_ provider: AIProvider)` | `FloCommand::AddProviderToFailoverOrder` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A31 | `removeProviderFromFailoverOrder(_ provider: AIProvider)` | `FloCommand::RemoveProviderFromFailoverOrder` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A32 | `setProviderEnabledInFailover(_ provider: AIProvider, enabled: Bool)` | `FloCommand::SetProviderEnabledInFailover` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A33 | `setFailoverAllowCrossProviderFallback(_ enabled: Bool)` | `FloCommand::SetFailoverAllowCrossProviderFallback` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A34 | `setFailoverMaxAttempts(_ value: Int)` | `FloCommand::SetFailoverMaxAttempts` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A35 | `setFailoverFailureThreshold(_ value: Int)` | `FloCommand::SetFailoverFailureThreshold` | `flo-core/src/controller.rs` reducer tests | In Progress |
