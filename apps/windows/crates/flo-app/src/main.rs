@@ -7,6 +7,7 @@ use flo_provider::config::FloConfiguration;
 
 #[cfg(test)]
 mod acceptance;
+mod runtime;
 
 fn main() -> Result<()> {
     let config = FloConfiguration::from_process_env()?;
