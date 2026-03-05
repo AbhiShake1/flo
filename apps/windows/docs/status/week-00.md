@@ -31,6 +31,8 @@
 - Added deterministic runtime fault-injection tests for OAuth, speech capture start/stop, TTS failures, and empty capture behavior in `flo-app`.
 - Marked all controller action ledger rows as `Parity` based on existing deterministic reducer/query/provider evidence and updated functional gate status accordingly.
 - Marked P0 spec-freeze milestone as `Parity` in the tracker now that governance artifacts are in place and wired into gate scripts.
+- Locked all UI surface rows in `05-ui-parity-spec.md` and added deterministic shell token/motion coverage (`flo-ui-win32::shell`) for settings/onboarding/permissions/tray/history-provider surfaces.
+- Added exhaustive error-message parity enforcement in `flo-core/tests/error_parity.rs` covering canonical text and trigger mappings.
 
 ## Blockers
 - None for scaffold stage.
