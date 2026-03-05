@@ -19,6 +19,7 @@
 - Added provider OAuth callback failure-branch and session refresh lifecycle tests.
 - Mapped all 69 action-ledger rows away from `Not Started` into concrete Windows command/query contracts with test evidence references.
 - Started P3 platform parity implementation with deterministic unit-tested selection fallback telemetry, injection preflight/send path checks, and elevation decision helpers.
+- Added deterministic hotkey conflict/hold-release semantics and audio capture-playback interruption coordinators in `flo-platform-win`.
 
 ## Blockers
 - None for scaffold stage.

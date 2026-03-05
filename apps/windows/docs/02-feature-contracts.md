@@ -68,3 +68,4 @@ The platform-neutral key model remains `flo_domain::keys::LogicalKey`.
 - `elevation`: whole-app UAC relaunch contract with integrity-level semantics.
 - `update`: feed check, download, checksum verify, stage apply.
 - Selection/injection/elevation contracts include deterministic unit coverage for fallback, typed failure mapping, and relaunch decision behavior.
+- Hotkey and audio contracts include deterministic conflict/hold semantics plus capture-playback interruption behavior coverage.
