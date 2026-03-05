@@ -1,6 +1,9 @@
 .DS_Store
 /.build
 .artifacts/
+/apps/macos/.build/
+/apps/macos/.artifacts/
+/apps/windows/target/
 /Packages
 xcuserdata/
 DerivedData/

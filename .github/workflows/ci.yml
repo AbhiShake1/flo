@@ -72,7 +72,7 @@ jobs:
           xcode-version: latest-stable
 
       - name: Swift Build
-        run: swift build
+        run: swift build --package-path apps/macos
 
       - name: Swift Tests
         run: ./scripts/run_tests.sh
@@ -90,4 +90,4 @@ jobs:
           sudo apt-get install -y shellcheck
 
       - name: Lint scripts
-        run: shellcheck scripts/*.sh
+        run: shellcheck scripts/*.sh apps/macos/scripts/*.sh
