@@ -6,6 +6,8 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+async-trait.workspace = true
+futures = "0.3"
 flo-core = { path = "../flo-core" }
 flo-domain = { path = "../flo-domain" }
 flo-platform-win = { path = "../flo-platform-win" }
