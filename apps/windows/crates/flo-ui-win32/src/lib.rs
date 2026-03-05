@@ -1,3 +1,7 @@
+use flo_core::ports::{
+    CoreResult, FloatingBarActions, FloatingBarBannerKind, FloatingBarChipModel,
+    FloatingBarManaging,
+};
 use flo_domain::FloatingBarState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,6 +69,78 @@ pub trait Win32Shell: Send {
     fn hide_main_window(&mut self);
     fn update_floating_bar(&mut self, model: &FloatingBarViewModel);
     fn show_tray_notification(&mut self, title: &str, body: &str);
+}
+
+pub struct ShellFloatingBarManager<S>
+where
+    S: Win32Shell,
+{
+    shell: S,
+    actions: Option<FloatingBarActions>,
+}
+
+impl<S> ShellFloatingBarManager<S>
+where
+    S: Win32Shell,
+{
+    pub fn new(shell: S) -> Self {
+        Self {
+            shell,
+            actions: None,
+        }
+    }
+
+    pub fn shell(&self) -> &S {
+        &self.shell
+    }
+
+    pub fn shell_mut(&mut self) -> &mut S {
+        &mut self.shell
+    }
+}
+
+impl<S> FloatingBarManaging for ShellFloatingBarManager<S>
+where
+    S: Win32Shell,
+{
+    fn set_actions(&mut self, actions: Option<FloatingBarActions>) -> CoreResult<()> {
+        self.actions = actions;
+        Ok(())
+    }
+
+    fn render_chip(&mut self, model: &FloatingBarChipModel) -> CoreResult<()> {
+        let view_model = FloatingBarViewModel {
+            state: model.state,
+            transcript_preview: model.transcript_preview.clone(),
+            level_meter: model.level_meter,
+            hint_text: model.hint_text.clone(),
+            busy: model.busy,
+            show_read_affordance: model.show_read_affordance,
+            banner: model.banner.as_ref().map(|banner| ChipBannerViewModel {
+                message: banner.message.clone(),
+                tone: match banner.kind {
+                    FloatingBarBannerKind::Success => ChipBannerTone::Success,
+                    FloatingBarBannerKind::Warning => ChipBannerTone::Warning,
+                    FloatingBarBannerKind::Error => ChipBannerTone::Error,
+                },
+            }),
+        };
+        self.shell.update_floating_bar(&view_model);
+        Ok(())
+    }
+
+    fn hide(&mut self) -> CoreResult<()> {
+        self.shell.update_floating_bar(&FloatingBarViewModel {
+            state: FloatingBarState::Hidden,
+            transcript_preview: None,
+            level_meter: 0.0,
+            hint_text: None,
+            busy: false,
+            show_read_affordance: true,
+            banner: None,
+        });
+        Ok(())
+    }
 }
 
 pub fn chip_geometry_for_state(state: FloatingBarState, dpi_scale: f32) -> ChipGeometry {
@@ -163,7 +239,87 @@ fn scale(value: f32, dpi_scale: f32) -> i32 {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use flo_core::ports::{FloatingBarBanner, FloatingBarBannerKind, FloatingBarChipModel};
+
     use super::*;
+
+    #[derive(Default, Clone)]
+    struct CapturingShell {
+        updates: Arc<Mutex<Vec<FloatingBarViewModel>>>,
+    }
+
+    impl CapturingShell {
+        fn latest_update(&self) -> Option<FloatingBarViewModel> {
+            self.updates.lock().expect("lock updates").last().cloned()
+        }
+    }
+
+    impl Win32Shell for CapturingShell {
+        fn show_main_window(&mut self) {}
+        fn hide_main_window(&mut self) {}
+        fn update_floating_bar(&mut self, model: &FloatingBarViewModel) {
+            self.updates
+                .lock()
+                .expect("lock updates")
+                .push(model.clone());
+        }
+        fn show_tray_notification(&mut self, _title: &str, _body: &str) {}
+    }
+
+    #[test]
+    fn floating_bar_manager_maps_core_chip_model_to_view_model() {
+        let shell = CapturingShell::default();
+        let shell_copy = shell.clone();
+        let mut manager = ShellFloatingBarManager::new(shell);
+
+        let model = FloatingBarChipModel {
+            state: FloatingBarState::Speaking,
+            transcript_preview: Some("draft".to_string()),
+            level_meter: 0.42,
+            hint_text: Some("hint".to_string()),
+            busy: true,
+            show_read_affordance: false,
+            banner: Some(FloatingBarBanner {
+                message: "banner".to_string(),
+                kind: FloatingBarBannerKind::Warning,
+            }),
+        };
+
+        manager.render_chip(&model).expect("render should succeed");
+        let latest = shell_copy.latest_update().expect("expected shell update");
+
+        assert_eq!(latest.state, FloatingBarState::Speaking);
+        assert_eq!(latest.transcript_preview.as_deref(), Some("draft"));
+        assert_eq!(latest.level_meter, 0.42);
+        assert_eq!(latest.hint_text.as_deref(), Some("hint"));
+        assert!(latest.busy);
+        assert!(!latest.show_read_affordance);
+        assert_eq!(
+            latest.banner,
+            Some(ChipBannerViewModel {
+                message: "banner".to_string(),
+                tone: ChipBannerTone::Warning,
+            })
+        );
+    }
+
+    #[test]
+    fn floating_bar_manager_hide_renders_hidden_state() {
+        let shell = CapturingShell::default();
+        let shell_copy = shell.clone();
+        let mut manager = ShellFloatingBarManager::new(shell);
+
+        manager.hide().expect("hide should succeed");
+        let latest = shell_copy.latest_update().expect("expected shell update");
+
+        assert_eq!(latest.state, FloatingBarState::Hidden);
+        assert!(latest.transcript_preview.is_none());
+        assert!(latest.banner.is_none());
+        assert!(!latest.busy);
+        assert!(latest.show_read_affordance);
+    }
 
     #[test]
     fn idle_geometry_matches_tokens_at_standard_dpi() {

@@ -5,4 +5,5 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+flo-core = { path = "../flo-core" }
 flo-domain = { path = "../flo-domain" }
