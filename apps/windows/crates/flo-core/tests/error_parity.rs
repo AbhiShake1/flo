@@ -68,7 +68,10 @@ fn canonical_error_messages_match_parity_table() {
         "Couldn't type transcript and could not copy to clipboard."
     );
     assert_eq!(
-        canonical_error_message(PlatformErrorCode::LiveTypingPaused, Some("backend unavailable")),
+        canonical_error_message(
+            PlatformErrorCode::LiveTypingPaused,
+            Some("backend unavailable")
+        ),
         "Live typing paused: backend unavailable. Final transcript will still complete."
     );
     assert_eq!(
@@ -133,5 +136,8 @@ fn injection_failures_map_to_specific_error_messages() {
 fn explicit_error_event_uses_canonical_message() {
     let mut controller = FloController::new();
     controller.apply_event(ControllerEvent::Error(PlatformErrorCode::NoSelectedText));
-    assert_eq!(controller.state.status_message.as_deref(), Some("No selected text."));
+    assert_eq!(
+        controller.state.status_message.as_deref(),
+        Some("No selected text.")
+    );
 }

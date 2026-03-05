@@ -274,4 +274,47 @@ mod tests {
             vec![("openai", 0), ("openai", 1), ("gemini", 0), ("openai", 0),]
         );
     }
+
+    #[test]
+    fn acceptance_a7_elevation_prompt_relaunch_and_retry_success() {
+        let mut controller = FloController::new();
+        let unelevated_capabilities = PlatformCapabilities {
+            target_requires_elevation: true,
+            elevated_mode: false,
+            can_prompt_for_elevation: true,
+            ..PlatformCapabilities::win32_default()
+        };
+
+        let first_effects =
+            controller.dispatch(FloCommand::ReadSelectedTextFromHotkey, &unelevated_capabilities);
+        assert_eq!(first_effects, vec![ControllerEffect::PromptForElevation]);
+
+        let relaunch_effects = controller.apply_event(ControllerEvent::ElevatedRelaunchRequested);
+        assert!(relaunch_effects.is_empty());
+        assert_eq!(
+            controller.state.status_message.as_deref(),
+            Some("The focused app requires elevated mode. Please relaunch flo as admin.")
+        );
+
+        let elevated_capabilities = PlatformCapabilities {
+            target_requires_elevation: true,
+            elevated_mode: true,
+            can_prompt_for_elevation: true,
+            ..PlatformCapabilities::win32_default()
+        };
+        let retry_effects =
+            controller.dispatch(FloCommand::ReadSelectedTextFromHotkey, &elevated_capabilities);
+
+        assert_eq!(
+            retry_effects,
+            vec![
+                ControllerEffect::ReadSelected {
+                    prefer_uia: true,
+                    fallback_to_clipboard: true,
+                },
+                ControllerEffect::StartTts,
+                ControllerEffect::UpdateFloatingBar(flo_domain::FloatingBarState::Speaking),
+            ]
+        );
+    }
 }
