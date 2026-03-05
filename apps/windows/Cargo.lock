@@ -80,6 +80,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "flo-core",
+ "flo-domain",
+ "flo-platform-win",
  "flo-provider",
 ]
 
@@ -108,6 +110,7 @@ dependencies = [
  "flo-domain",
  "getrandom",
  "hex",
+ "serde",
  "serde_json",
  "sha2",
  "thiserror",

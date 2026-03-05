@@ -5,6 +5,9 @@ use flo_core::{
 };
 use flo_provider::config::FloConfiguration;
 
+#[cfg(test)]
+mod acceptance;
+
 fn main() -> Result<()> {
     let config = FloConfiguration::from_process_env()?;
     let mut controller = FloController::new();

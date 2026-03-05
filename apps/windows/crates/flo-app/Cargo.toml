@@ -7,4 +7,6 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 flo-core = { path = "../flo-core" }
+flo-domain = { path = "../flo-domain" }
+flo-platform-win = { path = "../flo-platform-win" }
 flo-provider = { path = "../flo-provider" }

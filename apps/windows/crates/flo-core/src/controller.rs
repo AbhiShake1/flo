@@ -1699,6 +1699,30 @@ mod tests {
     }
 
     #[test]
+    fn read_selected_in_elevated_mode_skips_prompt_and_starts_read_flow() {
+        let mut controller = FloController::new();
+        let capabilities = PlatformCapabilities {
+            target_requires_elevation: true,
+            elevated_mode: true,
+            ..PlatformCapabilities::win32_default()
+        };
+
+        let effects = controller.dispatch(FloCommand::ReadSelectedTextFromHotkey, &capabilities);
+        assert_eq!(
+            effects,
+            vec![
+                ControllerEffect::ReadSelected {
+                    prefer_uia: true,
+                    fallback_to_clipboard: true,
+                },
+                ControllerEffect::StartTts,
+                ControllerEffect::UpdateFloatingBar(FloatingBarState::Speaking),
+            ]
+        );
+        assert_eq!(controller.state.recorder_state, RecorderState::Speaking);
+    }
+
+    #[test]
     fn update_shortcut_replaces_existing_action_binding() {
         let mut controller = FloController::new();
         let capabilities = PlatformCapabilities::win32_default();
