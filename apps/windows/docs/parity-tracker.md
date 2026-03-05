@@ -14,9 +14,9 @@ Status legend: `Not Started`, `In Progress`, `Parity`, `Exception`.
 | P3 | Platform core I/O parity | Engineer B | In Progress | Deterministic unit matrix for hotkeys/audio/selection/injection/elevation is green; Win32 adapter wiring into app harness is pending. |
 | P4 | Security/persistence parity | Engineer B | In Progress | Credential Manager + DPAPI backends and encrypted history lifecycle (retention + corruption recovery) are implemented with deterministic tests; Win32 runtime validation pending. |
 | P5 | Native Win32 UI parity | Engineer C | In Progress | Token/motion/interaction parity model now has deterministic DPI coverage in `flo-ui-win32`; real Win32 shell rendering and side-by-side capture pending. |
-| P6 | Packaging + update paths | Engineer C | In Progress | Feed parsing, checksum validation, staged apply + rollback pointer, ZIP packaging script, and MSIX/winget prep script are implemented; signing-gated GA validation pending. |
+| P6 | Packaging + update paths | Engineer C | In Progress | Feed parsing, checksum validation, staged apply + rollback pointer, ZIP packaging script, MSIX/winget prep script, and release readiness gate scripts are implemented; signing-gated GA validation pending. |
 | P7 | End-to-end parity hardening | All | In Progress | Acceptance scenarios (dictation/read-selected/elevation/permissions/live-finalization/failover) are automated in `flo-app`; real app matrix and Windows runtime fault injection still pending. |
-| P8 | Release readiness + soak | All + QA | Not Started | 48h soak complete and launch checklist signed. |
+| P8 | Release readiness + soak | All + QA | In Progress | Release checklist (`07-release-readiness-checklist.md`) and gate scripts (`scripts/release-readiness.sh`, `scripts/verify-parity-gates.sh`) are in place; 48h soak and strict-gate signoff pending. |
 
 ## Gate tracker (release blockers)
 

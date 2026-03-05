@@ -24,6 +24,10 @@
 - Added P5 token-accurate `flo-ui-win32` chip geometry/interaction/motion model with 100/125/150 DPI tests.
 - Added P6 updater hardening (feed parsing, staged apply metadata, rollback pointer) and release scripts for ZIP packaging + MSIX/winget prep with signing gate.
 - Added automated acceptance scenario tests (A1-A6) in `flo-app` as P7 hardening baseline.
+- Wired `flo-app` runtime to execute controller effects through concrete service bundle adapters (auth/permissions/prefs/floating-bar/speech/tts).
+- Added deterministic runtime coverage for auth restore/login/logout, speech capture transcript handoff, and TTS request propagation.
+- Added Win32 shell parity state model in `flo-ui-win32` for tray/menu routing, onboarding permission gating, and DPI-aware shell tokens.
+- Added release-readiness artifacts: `07-release-readiness-checklist.md`, `scripts/verify-parity-gates.sh`, and `scripts/release-readiness.sh`.
 
 ## Blockers
 - None for scaffold stage.
