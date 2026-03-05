@@ -10,6 +10,8 @@
 - Domain parity types and logical key model established.
 - Controller commands/effects skeleton established.
 - Provider config and platform update/security contracts documented.
+- Added strict parity governance docs: `04-controller-action-ledger.md`, `05-ui-parity-spec.md`, `06-error-message-parity.md`.
+- Added frozen domain/core/provider contract pass for parity-critical APIs.
 
 ## Blockers
 - None for scaffold stage.

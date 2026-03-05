@@ -21,13 +21,6 @@ Status legend: `Not Started`, `In Progress`, `Parity`, `Exception`.
 
 ## FloController public action mapping
 
-Mapped command set exists in `flo-core::controller::FloCommand` for the major public actions from macOS:
-- bootstrap/login/logout
-- permission refresh + request flows
-- shortcut update/reset
-- dictation start/stop + live mode toggles
-- read-selected, voice preview, history clear
-- rewrite preference updates
-- provider credential and failover controls
+Row-by-row action coverage is tracked in `apps/windows/docs/04-controller-action-ledger.md` (69 public actions from macOS baseline).
 
 Any unimplemented behavior is tracked in `apps/windows/docs/parity-tracker.md`.

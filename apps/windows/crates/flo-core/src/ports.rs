@@ -2,12 +2,14 @@ use std::path::PathBuf;
 
 use async_trait::async_trait;
 use flo_domain::{
-    AuthState, DictationRewritePreferences, PermissionKind, PermissionStatus, RecorderState,
-    ShortcutBinding, UserSession,
+    AppIntegrityLevel, AuthState, DictationRewritePreferences, FloatingBarState, PermissionKind,
+    PermissionStatus, PlatformErrorCode, SelectionReadResult, ShortcutBinding,
+    TextInjectionFailureReason, UserSession,
 };
 use thiserror::Error;
 
 pub type CoreResult<T> = Result<T, CoreError>;
+pub type InjectionResult<T> = Result<T, TextInjectionFailureReason>;
 
 #[derive(Debug, Error)]
 pub enum CoreError {
@@ -25,6 +27,20 @@ pub enum CoreError {
     Io(String),
     #[error("platform: {0}")]
     Platform(String),
+}
+
+impl CoreError {
+    pub const fn error_code(&self) -> PlatformErrorCode {
+        match self {
+            Self::Unauthorized => PlatformErrorCode::Unauthorized,
+            Self::PermissionDenied(_) => PlatformErrorCode::PermissionDenied,
+            Self::SelectionUnavailable => PlatformErrorCode::NoSelectedText,
+            Self::InjectionFailed => PlatformErrorCode::InjectionFailed,
+            Self::SecureInputActive => PlatformErrorCode::InjectionSecureInput,
+            Self::Io(_) => PlatformErrorCode::PersistenceError,
+            Self::Platform(_) => PlatformErrorCode::NetworkError,
+        }
+    }
 }
 
 #[async_trait]
@@ -57,16 +73,29 @@ pub trait SpeechCaptureService: Send {
 }
 
 pub trait SelectionReaderService: Send {
-    fn get_selected_text_uia(&mut self) -> CoreResult<String>;
-    fn get_selected_text_clipboard_fallback(&mut self) -> CoreResult<String>;
+    fn read_selected_text(&mut self) -> CoreResult<SelectionReadResult>;
 }
 
 pub trait TextInjectionService: Send {
-    fn inject_text(&mut self, text: &str) -> CoreResult<()>;
-    fn replace_recent_text(&mut self, previous_text: &str, updated_text: &str) -> CoreResult<()>;
-    fn is_secure_field_active(&self) -> bool {
-        false
-    }
+    fn inject_text(&mut self, text: &str) -> InjectionResult<()>;
+    fn replace_recent_text(
+        &mut self,
+        previous_text: &str,
+        updated_text: &str,
+    ) -> InjectionResult<()>;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ElevationPromptOutcome {
+    AlreadyElevated,
+    RelaunchRequested,
+    PromptDeclined,
+}
+
+pub trait ElevationService: Send {
+    fn current_integrity_level(&self) -> CoreResult<AppIntegrityLevel>;
+    fn focused_target_integrity_level(&self) -> CoreResult<AppIntegrityLevel>;
+    fn request_elevated_relaunch(&mut self, reason: &str) -> CoreResult<ElevationPromptOutcome>;
 }
 
 #[async_trait]
@@ -81,16 +110,58 @@ pub trait TTSService: Send {
     fn stop_playback(&mut self) -> CoreResult<()>;
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PermissionSettingsTarget {
+    MicrophonePrivacy,
+    AccessibilityPrivacy,
+    InputMonitoringPrivacy,
+}
+
 pub trait PermissionsService: Send {
     fn refresh_status(&mut self) -> PermissionStatus;
     fn request_microphone_access(&mut self) -> CoreResult<bool>;
-    fn open_system_settings(&mut self, permission: PermissionKind) -> CoreResult<()>;
+    fn open_settings_target(
+        &mut self,
+        permission: PermissionKind,
+    ) -> CoreResult<PermissionSettingsTarget>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FloatingBarBannerKind {
     Success,
     Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FloatingBarBanner {
+    pub message: String,
+    pub kind: FloatingBarBannerKind,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FloatingBarChipModel {
+    pub state: FloatingBarState,
+    pub transcript_preview: Option<String>,
+    pub level_meter: f32,
+    pub hint_text: Option<String>,
+    pub busy: bool,
+    pub show_read_affordance: bool,
+    pub banner: Option<FloatingBarBanner>,
+}
+
+impl Default for FloatingBarChipModel {
+    fn default() -> Self {
+        Self {
+            state: FloatingBarState::Hidden,
+            transcript_preview: None,
+            level_meter: 0.0,
+            hint_text: None,
+            busy: false,
+            show_read_affordance: true,
+            banner: None,
+        }
+    }
 }
 
 pub struct FloatingBarActions {
@@ -103,10 +174,7 @@ pub struct FloatingBarActions {
 
 pub trait FloatingBarManaging: Send {
     fn set_actions(&mut self, actions: Option<FloatingBarActions>) -> CoreResult<()>;
-    fn show(&mut self, state: RecorderState) -> CoreResult<()>;
-    fn update(&mut self, state: RecorderState) -> CoreResult<()>;
-    fn update_audio_level(&mut self, level: f32) -> CoreResult<()>;
-    fn show_banner(&mut self, message: &str, kind: FloatingBarBannerKind) -> CoreResult<()>;
+    fn render_chip(&mut self, model: &FloatingBarChipModel) -> CoreResult<()>;
     fn hide(&mut self) -> CoreResult<()>;
 }
 

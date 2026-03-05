@@ -1,16 +1,36 @@
 # Parity Tracker
 
-| Feature | Status | Owner | Notes |
-|---|---|---|---|
-| W0 parity matrix + contracts | In Progress | Platform | Initial baseline committed. |
-| W1 workspace + CI | In Progress | Platform | Workspace is present; CI wiring pending. |
-| W2 domain + controller parity | In Progress | Core | Skeleton reducer + commands committed. |
-| W3 provider/auth subsystem | Not Started | Provider | OAuth + callback + retry integration pending. |
-| W4 storage + security | Not Started | Platform | Credential Manager + DPAPI implementation pending. |
-| W5 audio + transcription + TTS | Not Started | Platform | WASAPI path pending. |
-| W6 hotkeys + selection + injection + elevation | In Progress | Platform | Interfaces and effect contracts in place. |
-| W7 native UI parity | Not Started | UI | Win32 window/tray/floating bar pending. |
-| W8 packaging + updates | In Progress | Release | Update contract and ZIP-first path defined. |
-| W9 hardening + launch readiness | Not Started | All | Telemetry, rollback, fault injection pending. |
+Source of truth for Windows strict one-to-one parity gate.
 
-Mismatch policy: any behavior mismatch must be logged with rationale and mitigation before merge.
+Status legend: `Not Started`, `In Progress`, `Parity`, `Exception`.
+
+## Milestone tracker
+
+| Milestone | Scope | Owner | Status | Exit criteria |
+|---|---|---|---|---|
+| P0 | Spec freeze and macOS baseline capture | All | In Progress | `04`, `05`, `06` docs locked and signed. |
+| P1 | Domain/core/provider/platform contract freeze + reducer harness | Core/Provider | In Progress | Contract APIs stable; reducer golden tests present. |
+| P2 | Controller/provider behavior parity | Engineer A | Not Started | Deterministic auth/routing/failover tests pass. |
+| P3 | Platform core I/O parity | Engineer B | Not Started | Hotkeys/audio/selection/injection/elevation matrix passes. |
+| P4 | Security/persistence parity | Engineer B | Not Started | Credential Manager + DPAPI + corruption recovery pass. |
+| P5 | Native Win32 UI parity | Engineer C | Not Started | Side-by-side chip/settings/onboarding parity at 100/125/150 DPI. |
+| P6 | Packaging + update paths | Engineer C | Not Started | ZIP install/upgrade/rollback + updater checksum paths pass. |
+| P7 | End-to-end parity hardening | All | Not Started | Full parity matrix green, no open exceptions. |
+| P8 | Release readiness + soak | All + QA | Not Started | 48h soak complete and launch checklist signed. |
+
+## Gate tracker (release blockers)
+
+| Gate | Rule | Current state | Evidence |
+|---|---|---|---|
+| Functional gate | Every row in `04-controller-action-ledger.md` has passing automated or scripted evidence. | In Progress | Ledger created; row-level evidence pending. |
+| Visual gate | Every row in `05-ui-parity-spec.md` passes side-by-side review at 100/125/150 DPI. | Not Started | Chip tokens locked; full-surface capture pending. |
+| Error gate | User-facing errors exactly match `06-error-message-parity.md` text and triggers. | In Progress | Canonical table created; enforcement wiring pending. |
+| Elevation gate | Privileged target flow prompts, relaunches, retries, and succeeds without silent failure. | In Progress | Core elevation contract present; platform implementation pending. |
+| Release gate | No tracker row may remain `Not Started`, `In Progress`, or `Exception`. | Not Met | Pre-release state. |
+
+## Strict parity policy
+
+1. `Exception` is temporary only and must include owner, rationale, and expiry date in weekly status doc.
+2. Release candidate creation is blocked until every milestone and every gate is `Parity`.
+3. Feature flags may control fallback paths, but may not bypass parity gate criteria.
+4. All deltas must be recorded weekly in `apps/windows/docs/status/week-XX.md`.

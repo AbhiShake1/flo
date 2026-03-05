@@ -1,7 +1,8 @@
 use flo_domain::{
     AuthState, DictationBaseTone, DictationLiveFinalizationMode, DictationRewritePreferences,
-    DictationStyleLevel, PermissionKind, PermissionStatus, ProviderRoutingOverrides, RecorderState,
-    ShortcutBinding,
+    DictationStyleLevel, FloatingBarState, PermissionKind, PermissionStatus, PlatformErrorCode,
+    ProviderRoutingOverrides, RecorderState, SelectionReadMethod, ShortcutBinding,
+    TextInjectionFailureReason, UserSession,
 };
 
 use crate::capabilities::PlatformCapabilities;
@@ -17,6 +18,7 @@ pub struct ControllerState {
     pub dictation_rewrite_preferences: DictationRewritePreferences,
     pub provider_routing_overrides: ProviderRoutingOverrides,
     pub status_message: Option<String>,
+    pub last_selection_read_method: Option<SelectionReadMethod>,
 }
 
 impl Default for ControllerState {
@@ -31,6 +33,7 @@ impl Default for ControllerState {
             dictation_rewrite_preferences: DictationRewritePreferences::default(),
             provider_routing_overrides: ProviderRoutingOverrides::default(),
             status_message: None,
+            last_selection_read_method: None,
         }
     }
 }
@@ -66,6 +69,14 @@ pub enum FloCommand {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum LiveFinalizationPlan {
+    InjectDelta(String),
+    ReplaceWithFinal(String),
+    CopyFinalToClipboard(String),
+    Noop,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum ControllerEffect {
     RestoreSession,
     StartOAuth,
@@ -76,17 +87,39 @@ pub enum ControllerEffect {
     PersistRewritePreferences,
     PersistRoutingOverrides,
     ClearHistory,
-    ShowFloatingBar(RecorderState),
-    UpdateFloatingBar(RecorderState),
+    ShowFloatingBar(FloatingBarState),
+    UpdateFloatingBar(FloatingBarState),
     HideFloatingBar,
     StartSpeechCapture,
     StopSpeechCapture,
+    FinalizeDictation(LiveFinalizationPlan),
     ReadSelected {
         prefer_uia: bool,
         fallback_to_clipboard: bool,
     },
     PromptForElevation,
     StartTts,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ControllerEvent {
+    AuthRestored(Option<UserSession>),
+    CaptureStarted,
+    CaptureStopped {
+        transcript: String,
+    },
+    TranscriptPartial(String),
+    SelectionRead {
+        text: String,
+        method: SelectionReadMethod,
+    },
+    InjectionCompleted,
+    InjectionFailed(TextInjectionFailureReason),
+    ElevatedRelaunchRequested,
+    PermissionStatusUpdated(PermissionStatus),
+    Error(PlatformErrorCode),
+    TtsCompleted,
+    TtsCanceled,
 }
 
 #[derive(Debug, Default)]
@@ -188,33 +221,37 @@ impl FloController {
             FloCommand::ClearHistory => vec![ControllerEffect::ClearHistory],
             FloCommand::StartDictationFromHotkey => {
                 if !capabilities.injection_supported {
-                    self.state.recorder_state =
-                        RecorderState::Error("Injection is not supported in this context.".into());
-                    self.state.status_message =
-                        Some("Injection is not supported for the focused target.".to_string());
+                    self.state.recorder_state = RecorderState::Error(
+                        "Injection is not supported in this context.".to_string(),
+                    );
+                    self.state.status_message = Some(canonical_error_message(
+                        PlatformErrorCode::InjectionFailed,
+                        None,
+                    ));
                     return Vec::new();
                 }
+
                 self.state.recorder_state = RecorderState::Listening;
                 self.state.live_transcript_preview.clear();
                 vec![
-                    ControllerEffect::ShowFloatingBar(RecorderState::Listening),
+                    ControllerEffect::ShowFloatingBar(FloatingBarState::Listening),
                     ControllerEffect::StartSpeechCapture,
                 ]
             }
             FloCommand::StopDictationFromHotkey => {
                 self.state.recorder_state = RecorderState::Transcribing;
                 vec![
-                    ControllerEffect::UpdateFloatingBar(RecorderState::Transcribing),
+                    ControllerEffect::UpdateFloatingBar(FloatingBarState::Transcribing),
                     ControllerEffect::StopSpeechCapture,
                 ]
             }
             FloCommand::ReadSelectedTextFromHotkey => {
                 if capabilities.target_requires_elevation && !capabilities.elevated_mode {
                     if capabilities.can_prompt_for_elevation {
-                        self.state.status_message = Some(
-                            "The focused app requires elevated mode. Please relaunch flo as admin."
-                                .to_string(),
-                        );
+                        self.state.status_message = Some(canonical_error_message(
+                            PlatformErrorCode::ElevationRequired,
+                            None,
+                        ));
                         return vec![ControllerEffect::PromptForElevation];
                     }
                     self.state.recorder_state = RecorderState::Error(
@@ -230,7 +267,7 @@ impl FloController {
                         fallback_to_clipboard: capabilities.clipboard_fallback_available,
                     },
                     ControllerEffect::StartTts,
-                    ControllerEffect::UpdateFloatingBar(RecorderState::Speaking),
+                    ControllerEffect::UpdateFloatingBar(FloatingBarState::Speaking),
                 ]
             }
             FloCommand::PreviewCurrentVoice => vec![ControllerEffect::StartTts],
@@ -258,16 +295,267 @@ impl FloController {
             }
         }
     }
+
+    pub fn apply_event(&mut self, event: ControllerEvent) -> Vec<ControllerEffect> {
+        match event {
+            ControllerEvent::AuthRestored(Some(session)) => {
+                self.state.auth_state = AuthState::LoggedIn(session);
+                self.state.status_message = None;
+                Vec::new()
+            }
+            ControllerEvent::AuthRestored(None) => {
+                self.state.auth_state = AuthState::LoggedOut;
+                self.state.status_message = Some(canonical_error_message(
+                    PlatformErrorCode::Unauthorized,
+                    None,
+                ));
+                Vec::new()
+            }
+            ControllerEvent::CaptureStarted => {
+                self.state.recorder_state = RecorderState::Listening;
+                vec![ControllerEffect::ShowFloatingBar(
+                    FloatingBarState::Listening,
+                )]
+            }
+            ControllerEvent::TranscriptPartial(partial) => {
+                let normalized = normalize_transcript(&partial);
+                if normalized.is_empty() || !self.state.live_dictation_enabled {
+                    return Vec::new();
+                }
+
+                self.state.live_transcript_preview = normalized;
+                Vec::new()
+            }
+            ControllerEvent::CaptureStopped { transcript } => {
+                let normalized = normalize_transcript(&transcript);
+                if normalized.is_empty() {
+                    self.state.recorder_state = RecorderState::Error(canonical_error_message(
+                        PlatformErrorCode::EmptyAudioCapture,
+                        None,
+                    ));
+                    self.state.status_message = Some(canonical_error_message(
+                        PlatformErrorCode::EmptyAudioCapture,
+                        None,
+                    ));
+                    return vec![ControllerEffect::UpdateFloatingBar(FloatingBarState::Error)];
+                }
+
+                let plan = if self.state.live_dictation_enabled {
+                    plan_live_finalization(
+                        &self.state.live_transcript_preview,
+                        &normalized,
+                        self.state
+                            .dictation_rewrite_preferences
+                            .live_finalization_mode,
+                    )
+                } else {
+                    LiveFinalizationPlan::InjectDelta(normalized.clone())
+                };
+
+                self.state.live_transcript_preview = normalized;
+                match plan {
+                    LiveFinalizationPlan::Noop => {
+                        self.state.recorder_state = RecorderState::Idle;
+                        vec![ControllerEffect::HideFloatingBar]
+                    }
+                    _ => {
+                        self.state.recorder_state = RecorderState::Injecting;
+                        vec![
+                            ControllerEffect::UpdateFloatingBar(FloatingBarState::Injecting),
+                            ControllerEffect::FinalizeDictation(plan),
+                        ]
+                    }
+                }
+            }
+            ControllerEvent::SelectionRead { method, .. } => {
+                self.state.last_selection_read_method = Some(method);
+                self.state.recorder_state = RecorderState::Speaking;
+                self.state.status_message = None;
+                vec![ControllerEffect::UpdateFloatingBar(
+                    FloatingBarState::Speaking,
+                )]
+            }
+            ControllerEvent::InjectionCompleted => {
+                self.state.recorder_state = RecorderState::Idle;
+                vec![ControllerEffect::HideFloatingBar]
+            }
+            ControllerEvent::InjectionFailed(reason) => {
+                let code = match reason {
+                    TextInjectionFailureReason::SecureField => {
+                        PlatformErrorCode::InjectionSecureInput
+                    }
+                    TextInjectionFailureReason::IntegrityMismatch { .. } => {
+                        PlatformErrorCode::ElevationRequired
+                    }
+                    TextInjectionFailureReason::GenericFailure => {
+                        PlatformErrorCode::InjectionFailed
+                    }
+                };
+                self.state.recorder_state =
+                    RecorderState::Error(canonical_error_message(code, None));
+                self.state.status_message = Some(canonical_error_message(code, None));
+
+                if code == PlatformErrorCode::ElevationRequired {
+                    return vec![
+                        ControllerEffect::UpdateFloatingBar(FloatingBarState::Error),
+                        ControllerEffect::PromptForElevation,
+                    ];
+                }
+
+                vec![ControllerEffect::UpdateFloatingBar(FloatingBarState::Error)]
+            }
+            ControllerEvent::ElevatedRelaunchRequested => {
+                self.state.status_message = Some(canonical_error_message(
+                    PlatformErrorCode::ElevationRequired,
+                    None,
+                ));
+                Vec::new()
+            }
+            ControllerEvent::PermissionStatusUpdated(status) => {
+                self.state.permission_status = status;
+                Vec::new()
+            }
+            ControllerEvent::Error(code) => {
+                self.state.status_message = Some(canonical_error_message(code, None));
+                Vec::new()
+            }
+            ControllerEvent::TtsCompleted => {
+                self.state.recorder_state = RecorderState::Idle;
+                self.state.status_message.replace(canonical_error_message(
+                    PlatformErrorCode::ReadAloudCompleted,
+                    None,
+                ));
+                vec![ControllerEffect::HideFloatingBar]
+            }
+            ControllerEvent::TtsCanceled => {
+                self.state.recorder_state = RecorderState::Idle;
+                self.state.status_message.replace(canonical_error_message(
+                    PlatformErrorCode::ReadAloudCanceled,
+                    None,
+                ));
+                vec![ControllerEffect::HideFloatingBar]
+            }
+        }
+    }
+}
+
+pub fn plan_live_finalization(
+    live_injected_transcript: &str,
+    finalized_text: &str,
+    mode: DictationLiveFinalizationMode,
+) -> LiveFinalizationPlan {
+    let normalized_final = normalize_transcript(finalized_text);
+    if normalized_final.is_empty() {
+        return LiveFinalizationPlan::Noop;
+    }
+
+    match mode {
+        DictationLiveFinalizationMode::AppendOnly => {
+            if live_injected_transcript.is_empty() {
+                return LiveFinalizationPlan::InjectDelta(normalized_final);
+            }
+
+            if let Some(delta) = normalized_final.strip_prefix(live_injected_transcript) {
+                if delta.is_empty() {
+                    LiveFinalizationPlan::Noop
+                } else {
+                    LiveFinalizationPlan::InjectDelta(delta.to_string())
+                }
+            } else {
+                LiveFinalizationPlan::CopyFinalToClipboard(normalized_final)
+            }
+        }
+        DictationLiveFinalizationMode::ReplaceWithFinal => {
+            if normalize_transcript(live_injected_transcript) == normalized_final {
+                LiveFinalizationPlan::Noop
+            } else {
+                LiveFinalizationPlan::ReplaceWithFinal(normalized_final)
+            }
+        }
+    }
+}
+
+pub fn canonical_error_message(code: PlatformErrorCode, detail: Option<&str>) -> String {
+    match code {
+        PlatformErrorCode::OAuthMissingConfiguration => {
+            "ChatGPT OAuth configuration is missing.".to_string()
+        }
+        PlatformErrorCode::OAuthFailed => format!("OAuth failed: {}", detail.unwrap_or("Unknown")),
+        PlatformErrorCode::OAuthStateMismatch => "OAuth failed: State mismatch".to_string(),
+        PlatformErrorCode::OAuthAuthorizationCodeMissing => {
+            "OAuth failed: Authorization code missing".to_string()
+        }
+        PlatformErrorCode::Unauthorized => "You are not authenticated.".to_string(),
+        PlatformErrorCode::EmptyAudioCapture => "No audio was captured.".to_string(),
+        PlatformErrorCode::NoSelectedText => "No selected text.".to_string(),
+        PlatformErrorCode::InjectionFailed => {
+            "Failed to inject transcript into the focused app.".to_string()
+        }
+        PlatformErrorCode::InjectionSecureInput => {
+            "Injection blocked while secure input is active.".to_string()
+        }
+        PlatformErrorCode::PermissionDenied => {
+            format!("Permission denied: {}.", detail.unwrap_or("Unknown"))
+        }
+        PlatformErrorCode::FeatureDisabled => format!(
+            "{} is disabled by configuration.",
+            detail.unwrap_or("Feature")
+        ),
+        PlatformErrorCode::NetworkError => {
+            format!("Network error: {}", detail.unwrap_or("Unknown"))
+        }
+        PlatformErrorCode::PersistenceError => {
+            format!("Persistence error: {}", detail.unwrap_or("Unknown"))
+        }
+        PlatformErrorCode::ElevationRequired => {
+            "The focused app requires elevated mode. Please relaunch flo as admin.".to_string()
+        }
+        PlatformErrorCode::DictationClipboardFallback => {
+            "Couldn't type transcript. Copied to clipboard instead.".to_string()
+        }
+        PlatformErrorCode::DictationClipboardFallbackFailed => {
+            "Couldn't type transcript and could not copy to clipboard.".to_string()
+        }
+        PlatformErrorCode::LiveTypingPaused => {
+            format!(
+                "Live typing paused: {}. Final transcript will still complete.",
+                detail.unwrap_or("Unknown")
+            )
+        }
+        PlatformErrorCode::LiveFinalizationAppendCopied => {
+            "Live transcript differed from final model output. Final transcript copied to clipboard."
+                .to_string()
+        }
+        PlatformErrorCode::LiveFinalizationAppendCopyFailed => {
+            "Live transcript differed from final model output. Could not copy final transcript to clipboard."
+                .to_string()
+        }
+        PlatformErrorCode::LiveFinalizationReplace => {
+            "Replaced live draft with final transcript.".to_string()
+        }
+        PlatformErrorCode::ReadAloudCanceled => "Read-aloud canceled.".to_string(),
+        PlatformErrorCode::ReadAloudCompleted => "Read-aloud completed.".to_string(),
+        PlatformErrorCode::VoicePreviewBusy => {
+            "Wait for the current action to finish, then try voice preview again.".to_string()
+        }
+    }
+}
+
+fn normalize_transcript(input: &str) -> String {
+    input.trim().to_string()
 }
 
 #[cfg(test)]
 mod tests {
     use flo_domain::{
-        DictationLiveFinalizationMode, KeyCombo, LogicalKey, ShortcutAction, ShortcutBinding,
-        ShortcutModifiers,
+        AppIntegrityLevel, DictationLiveFinalizationMode, FloatingBarState, KeyCombo, LogicalKey,
+        ShortcutAction, ShortcutBinding, ShortcutModifiers,
     };
 
-    use super::{ControllerEffect, FloCommand, FloController};
+    use super::{
+        canonical_error_message, plan_live_finalization, ControllerEffect, ControllerEvent,
+        FloCommand, FloController, LiveFinalizationPlan,
+    };
     use crate::capabilities::PlatformCapabilities;
 
     #[test]
@@ -353,5 +641,83 @@ mod tests {
                 .live_finalization_mode,
             DictationLiveFinalizationMode::ReplaceWithFinal
         );
+    }
+
+    #[test]
+    fn append_only_finalization_extracts_delta() {
+        let plan = plan_live_finalization(
+            "hello world",
+            "hello world from flo",
+            DictationLiveFinalizationMode::AppendOnly,
+        );
+
+        assert_eq!(
+            plan,
+            LiveFinalizationPlan::InjectDelta(" from flo".to_string())
+        );
+    }
+
+    #[test]
+    fn append_only_finalization_falls_back_to_clipboard_when_prefix_mismatch() {
+        let plan = plan_live_finalization(
+            "hello world",
+            "greetings from flo",
+            DictationLiveFinalizationMode::AppendOnly,
+        );
+
+        assert_eq!(
+            plan,
+            LiveFinalizationPlan::CopyFinalToClipboard("greetings from flo".to_string())
+        );
+    }
+
+    #[test]
+    fn replace_with_final_overwrites_live_draft() {
+        let plan = plan_live_finalization(
+            "draft text",
+            "final rewritten text",
+            DictationLiveFinalizationMode::ReplaceWithFinal,
+        );
+
+        assert_eq!(
+            plan,
+            LiveFinalizationPlan::ReplaceWithFinal("final rewritten text".to_string())
+        );
+    }
+
+    #[test]
+    fn capture_stopped_emits_finalize_effect() {
+        let mut controller = FloController::new();
+        controller.state.live_dictation_enabled = true;
+        controller.state.live_transcript_preview = "hello".to_string();
+
+        let effects = controller.apply_event(ControllerEvent::CaptureStopped {
+            transcript: "hello there".to_string(),
+        });
+
+        assert!(effects.contains(&ControllerEffect::UpdateFloatingBar(
+            FloatingBarState::Injecting,
+        )));
+    }
+
+    #[test]
+    fn canonical_error_message_matches_secure_input_copy() {
+        let message =
+            canonical_error_message(flo_domain::PlatformErrorCode::InjectionSecureInput, None);
+        assert_eq!(message, "Injection blocked while secure input is active.");
+    }
+
+    #[test]
+    fn integrity_mismatch_requests_elevation() {
+        let mut controller = FloController::new();
+
+        let effects = controller.apply_event(ControllerEvent::InjectionFailed(
+            flo_domain::TextInjectionFailureReason::IntegrityMismatch {
+                app_integrity: AppIntegrityLevel::Medium,
+                target_integrity: AppIntegrityLevel::High,
+            },
+        ));
+
+        assert!(effects.contains(&ControllerEffect::PromptForElevation));
     }
 }

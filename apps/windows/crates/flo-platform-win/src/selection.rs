@@ -1,3 +1,4 @@
+use flo_domain::SelectionReadMethod;
 use thiserror::Error;
 
 pub type SelectionResult<T> = Result<T, SelectionError>;
@@ -14,16 +15,10 @@ pub enum SelectionError {
     Platform(String),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SelectionMethod {
-    UiAutomation,
-    ClipboardFallback,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SelectionRead {
     pub text: String,
-    pub method: SelectionMethod,
+    pub method: SelectionReadMethod,
 }
 
 pub trait SelectionReader: Send + Sync {
@@ -34,7 +29,7 @@ pub trait SelectionReader: Send + Sync {
         match self.read_via_uia() {
             Ok(text) if !text.trim().is_empty() => Ok(SelectionRead {
                 text,
-                method: SelectionMethod::UiAutomation,
+                method: SelectionReadMethod::UiAutomation,
             }),
             _ => {
                 let text = self.read_via_clipboard_fallback()?;
@@ -43,7 +38,7 @@ pub trait SelectionReader: Send + Sync {
                 }
                 Ok(SelectionRead {
                     text,
-                    method: SelectionMethod::ClipboardFallback,
+                    method: SelectionReadMethod::ClipboardFallback,
                 })
             }
         }

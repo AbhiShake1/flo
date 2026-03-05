@@ -1,3 +1,4 @@
+use flo_domain::AppIntegrityLevel;
 use thiserror::Error;
 
 pub type ElevationResult<T> = Result<T, ElevationError>;
@@ -16,23 +17,27 @@ pub enum ElevationError {
 pub enum ElevationDecision {
     AlreadyElevated,
     RelaunchRequested,
+    PromptDeclined,
 }
 
 pub trait ElevationService: Send + Sync {
-    fn is_process_elevated(&self) -> bool;
-    fn prompt_for_elevation(&self, reason: &str) -> ElevationResult<ElevationDecision>;
+    fn current_integrity_level(&self) -> ElevationResult<AppIntegrityLevel>;
+    fn focused_target_integrity_level(&self) -> ElevationResult<AppIntegrityLevel>;
+    fn request_elevated_relaunch(&self, reason: &str) -> ElevationResult<ElevationDecision>;
 }
 
 pub fn ensure_elevated_for_target(
     service: &dyn ElevationService,
-    target_requires_elevation: bool,
+    target_integrity: AppIntegrityLevel,
     reason: &str,
 ) -> ElevationResult<Option<ElevationDecision>> {
-    if !target_requires_elevation {
+    if target_integrity != AppIntegrityLevel::High && target_integrity != AppIntegrityLevel::System
+    {
         return Ok(None);
     }
-    if service.is_process_elevated() {
+    let app_integrity = service.current_integrity_level()?;
+    if app_integrity == AppIntegrityLevel::High || app_integrity == AppIntegrityLevel::System {
         return Ok(Some(ElevationDecision::AlreadyElevated));
     }
-    service.prompt_for_elevation(reason).map(Some)
+    service.request_elevated_relaunch(reason).map(Some)
 }

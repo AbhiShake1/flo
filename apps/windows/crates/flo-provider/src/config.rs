@@ -381,6 +381,11 @@ fn build_oauth_configuration(env: &HashMap<String, String>) -> Result<Option<OAu
             if let Some(host) = token_url.host_str() {
                 set.insert(host.to_string());
             }
+            if let Ok(redirect_url) = Url::parse(&redirect_uri) {
+                if let Some(host) = redirect_url.host_str() {
+                    set.insert(host.to_string());
+                }
+            }
             set
         } else {
             parsed.into_iter().collect()

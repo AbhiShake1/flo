@@ -58,6 +58,128 @@ pub enum RecorderState {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub enum FloatingBarState {
+    Hidden,
+    IdleReady,
+    Listening,
+    Transcribing,
+    Injecting,
+    Speaking,
+    Error,
+}
+
+impl FloatingBarState {
+    pub const fn canonical_message(self) -> &'static str {
+        match self {
+            Self::Hidden => "",
+            Self::IdleReady => {
+                "Hold your dictation shortcut to start dictating, or click to start or stop dictation."
+            }
+            Self::Listening => "Listening",
+            Self::Transcribing => "Transcribing",
+            Self::Injecting => "Injecting",
+            Self::Speaking => "Click to stop narration.",
+            Self::Error => "Something went wrong.",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AppIntegrityLevel {
+    Medium,
+    High,
+    System,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SelectionReadMethod {
+    UiAutomation,
+    ClipboardFallback,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PlatformErrorCode {
+    OAuthMissingConfiguration,
+    OAuthFailed,
+    OAuthStateMismatch,
+    OAuthAuthorizationCodeMissing,
+    Unauthorized,
+    EmptyAudioCapture,
+    NoSelectedText,
+    InjectionFailed,
+    InjectionSecureInput,
+    PermissionDenied,
+    FeatureDisabled,
+    NetworkError,
+    PersistenceError,
+    ElevationRequired,
+    DictationClipboardFallback,
+    DictationClipboardFallbackFailed,
+    LiveTypingPaused,
+    LiveFinalizationAppendCopied,
+    LiveFinalizationAppendCopyFailed,
+    LiveFinalizationReplace,
+    ReadAloudCanceled,
+    ReadAloudCompleted,
+    VoicePreviewBusy,
+}
+
+impl PlatformErrorCode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::OAuthMissingConfiguration => "oauth.missing_configuration",
+            Self::OAuthFailed => "oauth.failed",
+            Self::OAuthStateMismatch => "oauth.state_mismatch",
+            Self::OAuthAuthorizationCodeMissing => "oauth.authorization_code_missing",
+            Self::Unauthorized => "auth.unauthorized",
+            Self::EmptyAudioCapture => "audio.empty_capture",
+            Self::NoSelectedText => "selection.none",
+            Self::InjectionFailed => "injection.generic_failed",
+            Self::InjectionSecureInput => "injection.secure_input_active",
+            Self::PermissionDenied => "permission.denied",
+            Self::FeatureDisabled => "feature.disabled",
+            Self::NetworkError => "network.error",
+            Self::PersistenceError => "persistence.error",
+            Self::ElevationRequired => "elevation.required_target",
+            Self::DictationClipboardFallback => "dictation.fallback.clipboard_copied",
+            Self::DictationClipboardFallbackFailed => "dictation.fallback.clipboard_failed",
+            Self::LiveTypingPaused => "dictation.live_typing_paused",
+            Self::LiveFinalizationAppendCopied => "dictation.live_finalization_append",
+            Self::LiveFinalizationAppendCopyFailed => {
+                "dictation.live_finalization_append_copy_failed"
+            }
+            Self::LiveFinalizationReplace => "dictation.live_finalization_replace",
+            Self::ReadAloudCanceled => "read_aloud.canceled",
+            Self::ReadAloudCompleted => "read_aloud.completed",
+            Self::VoicePreviewBusy => "voice_preview.busy",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelectionReadResult {
+    pub text: String,
+    pub method: SelectionReadMethod,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TextInjectionFailureReason {
+    SecureField,
+    IntegrityMismatch {
+        app_integrity: AppIntegrityLevel,
+        target_integrity: AppIntegrityLevel,
+    },
+    GenericFailure,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum HistoryEventKind {
     Dictation,
     ReadAloud,

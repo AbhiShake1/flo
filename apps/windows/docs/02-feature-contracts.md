@@ -1,46 +1,64 @@
-# 02 Feature Contracts
+# 02 Feature Contracts (P1 Freeze)
+
+Contract freeze date: 2026-03-05
 
 ## Core ports (`flo_core::ports`)
 
-The Windows app must satisfy trait contracts equivalent to macOS service protocols:
+Windows must satisfy port contracts equivalent to macOS protocols while preserving strict parity behavior.
+
+### Required ports
+
 - `AuthService`
 - `HotkeyManaging`
 - `SpeechCaptureService`
-- `SelectionReaderService`
-- `TextInjectionService`
+- `SelectionReaderService` (returns `SelectionReadResult { text, method }`)
+- `TextInjectionService` (returns structured `TextInjectionFailureReason`)
+- `ElevationService` (integrity-level checks + relaunch prompt contract)
 - `TTSService`
-- `PermissionsService`
-- `FloatingBarManaging`
+- `PermissionsService` (includes `open_settings_target(permission_kind)` mapping)
+- `FloatingBarManaging` (renders explicit chip model)
 
-Rules:
-1. `flo-core` must not call Win32 APIs directly.
-2. All side effects are represented as controller effects before execution.
-3. Selection extraction attempts UIA first and only falls back to clipboard on failure.
-4. If integrity mismatch blocks action, controller emits `PromptForElevation` and stops the action until elevated.
+### Core invariants
+
+1. `flo-core` does not call Win32 APIs directly.
+2. Reducer transitions are deterministic; side effects are represented as `ControllerEffect` values.
+3. Selection extraction is UIA-first with clipboard fallback metadata preserved via `SelectionReadMethod`.
+4. Injection failures must be typed (`SecureField`, `IntegrityMismatch`, `GenericFailure`) for canonical error mapping.
+5. Elevated-target mismatch must produce explicit elevation prompt effect/event flow.
 
 ## Domain contracts (`flo_domain`)
 
-`flo_domain::types` includes parity-critical types:
-- `AuthState`
-- `RecorderState`
-- `ShortcutBinding`
-- `HistoryEntry`
-- `DictationRewritePreferences`
-- `ProviderRoutingOverrides`
+Frozen parity types include:
 
-`flo_domain::keys::LogicalKey` is the platform-neutral shortcut identity used by all crates.
+- `FloatingBarState`
+- `AppIntegrityLevel`
+- `SelectionReadMethod`
+- `PlatformErrorCode`
+- `SelectionReadResult`
+- `TextInjectionFailureReason`
 
-## Provider config contract (`flo_provider::config::FloConfiguration`)
+The platform-neutral key model remains `flo_domain::keys::LogicalKey`.
 
-Requirements:
-1. Parse provider identity/order/credentials from environment.
-2. Preserve failover controls and host allowlist values.
-3. Preserve rewrite routing overrides shape.
-4. Keep OAuth fields explicit and optional.
+## Controller contracts (`flo_core::controller`)
+
+- Side-effect intents are represented by `ControllerEffect`.
+- Side-effect results are represented by `ControllerEvent` (`AuthRestored`, `CaptureStopped`, `SelectionRead`, `InjectionCompleted`, `InjectionFailed`, `ElevatedRelaunchRequested`, `PermissionStatusUpdated`, etc.).
+- Live dictation finalization uses deterministic plan output (`InjectDelta`, `ReplaceWithFinal`, `CopyFinalToClipboard`, `Noop`).
+- Canonical user message mapping is driven by `PlatformErrorCode`.
+
+## Provider contracts (`flo_provider`)
+
+- OAuth callback parser validates scheme + host allowlist + state + code + originator.
+- Routing override merge precedence matches macOS `applyingRoutingOverrides` behavior:
+  - override fields win when present;
+  - fallback to base config when absent;
+  - provider order always non-empty.
+- Failover evaluator outputs deterministic attempt plan (`provider`, `credential_index`, sequence number).
 
 ## Platform contracts (`flo_platform_win`)
 
-- `security::SecretStore`: Credential Manager + DPAPI abstraction boundary.
-- `update::UpdateService`: check feed, download artifact, verify SHA-256, stage apply.
-- `selection::SelectionReader`: UIA-first behavior contract.
-- `elevation::ElevationService`: prompt-to-elevate whole app contract.
+- `security`: Credential Manager + DPAPI abstraction boundary.
+- `selection`: UIA-first + clipboard fallback strategy with method tagging.
+- `injection`: structured failure reasons and secure-field/integrity mismatch signaling.
+- `elevation`: whole-app UAC relaunch contract with integrity-level semantics.
+- `update`: feed check, download, checksum verify, stage apply.

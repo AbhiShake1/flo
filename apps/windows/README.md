@@ -9,6 +9,10 @@ Scaffold complete:
 - Port-oriented interfaces modeled after `apps/macos/Sources/AppCore/ServiceProtocols.swift`.
 - Event-driven controller skeleton modeled after `apps/macos/Sources/Features/FloController.swift`.
 - Milestone, parity, and acceptance docs under `apps/windows/docs`.
+- Strict parity governance artifacts:
+  - `docs/04-controller-action-ledger.md`
+  - `docs/05-ui-parity-spec.md`
+  - `docs/06-error-message-parity.md`
 
 ## Workspace crates
 
