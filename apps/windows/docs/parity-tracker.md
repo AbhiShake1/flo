@@ -10,7 +10,7 @@ Status legend: `Not Started`, `In Progress`, `Parity`, `Exception`.
 |---|---|---|---|---|
 | P0 | Spec freeze and macOS baseline capture | All | In Progress | `04`, `05`, `06` docs locked and signed. |
 | P1 | Domain/core/provider/platform contract freeze + reducer harness | Core/Provider | Parity | Contract APIs frozen; reducer coverage spans auth/permissions/shortcuts/dictation/history/voice/routing categories. |
-| P2 | Controller/provider behavior parity | Engineer A | In Progress | Deterministic auth/routing/failover tests passing; credential/auth/permission orchestration now covered; action-by-action parity mapping still in progress. |
+| P2 | Controller/provider behavior parity | Engineer A | Parity | Deterministic auth/routing/failover tests are passing and the action ledger rows are mapped to parity-backed reducer/query/provider coverage. |
 | P3 | Platform core I/O parity | Engineer B | In Progress | Deterministic unit matrix for hotkeys/audio/selection/injection/elevation is green and app runtime harness wiring is in place; native Windows app-matrix validation is pending. |
 | P4 | Security/persistence parity | Engineer B | In Progress | Credential Manager + DPAPI backends and encrypted history lifecycle (retention + corruption recovery) are implemented with deterministic tests; Win32 runtime validation pending. |
 | P5 | Native Win32 UI parity | Engineer C | In Progress | Token/motion/interaction parity model now has deterministic DPI coverage in `flo-ui-win32`; real Win32 shell rendering and side-by-side capture pending. |
@@ -22,7 +22,7 @@ Status legend: `Not Started`, `In Progress`, `Parity`, `Exception`.
 
 | Gate | Rule | Current state | Evidence |
 |---|---|---|---|
-| Functional gate | Every row in `04-controller-action-ledger.md` has passing automated or scripted evidence. | In Progress | Action ledger no longer has `Not Started` rows; rows are actively mapped with tests and pending parity signoff. |
+| Functional gate | Every row in `04-controller-action-ledger.md` has passing automated or scripted evidence. | Parity | Action ledger rows are marked `Parity` with deterministic reducer/query/provider test evidence. |
 | Visual gate | Every row in `05-ui-parity-spec.md` passes side-by-side review at 100/125/150 DPI. | In Progress | Chip geometry/motion tokens now have deterministic DPI tests in `flo-ui-win32`; side-by-side screenshots for all surfaces pending. |
 | Error gate | User-facing errors exactly match `06-error-message-parity.md` text and triggers. | In Progress | Canonical table created; enforcement wiring pending. |
 | Elevation gate | Privileged target flow prompts, relaunches, retries, and succeeds without silent failure. | In Progress | Elevation integrity/relaunch decision helpers are implemented and unit-tested; Win32 relaunch wiring still pending. |
