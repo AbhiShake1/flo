@@ -131,6 +131,7 @@ dependencies = [
 name = "flo-ui-win32"
 version = "0.1.0"
 dependencies = [
+ "flo-core",
  "flo-domain",
 ]
 
