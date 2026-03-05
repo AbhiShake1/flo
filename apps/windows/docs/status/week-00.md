@@ -28,6 +28,7 @@
 - Added deterministic runtime coverage for auth restore/login/logout, speech capture transcript handoff, and TTS request propagation.
 - Added Win32 shell parity state model in `flo-ui-win32` for tray/menu routing, onboarding permission gating, and DPI-aware shell tokens.
 - Added release-readiness artifacts: `07-release-readiness-checklist.md`, `scripts/verify-parity-gates.sh`, and `scripts/release-readiness.sh`.
+- Added deterministic runtime fault-injection tests for OAuth, speech capture start/stop, TTS failures, and empty capture behavior in `flo-app`.
 
 ## Blockers
 - None for scaffold stage.

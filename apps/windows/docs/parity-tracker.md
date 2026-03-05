@@ -11,11 +11,11 @@ Status legend: `Not Started`, `In Progress`, `Parity`, `Exception`.
 | P0 | Spec freeze and macOS baseline capture | All | In Progress | `04`, `05`, `06` docs locked and signed. |
 | P1 | Domain/core/provider/platform contract freeze + reducer harness | Core/Provider | Parity | Contract APIs frozen; reducer coverage spans auth/permissions/shortcuts/dictation/history/voice/routing categories. |
 | P2 | Controller/provider behavior parity | Engineer A | In Progress | Deterministic auth/routing/failover tests passing; credential/auth/permission orchestration now covered; action-by-action parity mapping still in progress. |
-| P3 | Platform core I/O parity | Engineer B | In Progress | Deterministic unit matrix for hotkeys/audio/selection/injection/elevation is green; Win32 adapter wiring into app harness is pending. |
+| P3 | Platform core I/O parity | Engineer B | In Progress | Deterministic unit matrix for hotkeys/audio/selection/injection/elevation is green and app runtime harness wiring is in place; native Windows app-matrix validation is pending. |
 | P4 | Security/persistence parity | Engineer B | In Progress | Credential Manager + DPAPI backends and encrypted history lifecycle (retention + corruption recovery) are implemented with deterministic tests; Win32 runtime validation pending. |
 | P5 | Native Win32 UI parity | Engineer C | In Progress | Token/motion/interaction parity model now has deterministic DPI coverage in `flo-ui-win32`; real Win32 shell rendering and side-by-side capture pending. |
 | P6 | Packaging + update paths | Engineer C | In Progress | Feed parsing, checksum validation, staged apply + rollback pointer, ZIP packaging script, MSIX/winget prep script, and release readiness gate scripts are implemented; signing-gated GA validation pending. |
-| P7 | End-to-end parity hardening | All | In Progress | Acceptance scenarios (dictation/read-selected/elevation/permissions/live-finalization/failover) are automated in `flo-app`; real app matrix and Windows runtime fault injection still pending. |
+| P7 | End-to-end parity hardening | All | In Progress | Acceptance scenarios plus deterministic runtime fault-injection coverage (oauth/audio/capture/tts/selection/injection/elevation paths) are automated in `flo-app`; real app compatibility matrix validation is pending. |
 | P8 | Release readiness + soak | All + QA | In Progress | Release checklist (`07-release-readiness-checklist.md`) and gate scripts (`scripts/release-readiness.sh`, `scripts/verify-parity-gates.sh`) are in place; 48h soak and strict-gate signoff pending. |
 
 ## Gate tracker (release blockers)
