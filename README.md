@@ -149,8 +149,8 @@ Homebrew cask (this repository as your tap):
 # one-time
 brew tap AbhiShake1/flo https://github.com/AbhiShake1/flo
 
-# install (non-notarized build; avoids quarantine prompts)
-brew install --cask --no-quarantine flo
+# install
+brew install --cask flo
 
 # future updates
 brew upgrade --cask flo
@@ -160,10 +160,33 @@ brew uninstall --cask flo
 brew untap AbhiShake1/flo
 ```
 
-`brew upgrade --cask flo` picks up new versions after the automated cask bump PR
+If Gatekeeper blocks launch on a non-notarized build:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/FloApp.app
+open /Applications/FloApp.app
+```
+
+Install troubleshooting:
+
+```bash
+# verify your tap has the expected cask version
+brew cat --cask flo | rg 'version'
+
+# if Homebrew says "latest already installed" but /Applications/FloApp.app is missing
+brew reinstall --cask flo
+
+# if tap metadata still looks stale, refresh tap state
+brew untap abhishake1/flo
+brew tap AbhiShake1/flo https://github.com/AbhiShake1/flo
+brew update
+brew install --cask flo
+```
+
+`brew upgrade --cask flo` picks up new versions after the cask bump PR
 from the release workflow is merged into `main`.
 For first-time setup, create and push your first release tag, then merge the
-automated cask bump PR before running `brew install --cask --no-quarantine flo`.
+automated or manual cask bump PR before running `brew install --cask flo`.
 
 ## Release
 
@@ -199,4 +222,5 @@ This triggers `.github/workflows/release.yml`, which:
 
 1. Runs tests and builds release artifacts (currently non-notarized).
 2. Publishes the GitHub Release.
-3. Opens an automated PR that updates `Casks/flo.rb` with the release version and DMG checksum.
+3. Pushes a cask bump branch and attempts to open a PR that updates `Casks/flo.rb`.
+   If Actions PR creation is disabled in repo settings, open that PR manually.

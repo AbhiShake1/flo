@@ -38,14 +38,24 @@
 
 1. Push tag `v<version>` to trigger `.github/workflows/release.yml`.
 2. Confirm GitHub Release includes DMG and checksum artifacts.
-3. Confirm the automated Homebrew cask bump PR is created and targets `main`.
-4. Validate the PR cask changes:
+3. Confirm Homebrew cask bump update exists:
+   - automated PR created and targets `main`, or
+   - cask bump branch `chore/homebrew-cask-v<version>` exists
+4. If no PR was created, open it manually:
+   - `gh pr create --base main --head chore/homebrew-cask-v<version> --title "chore(cask): bump flo to v<version>"`
+5. Validate the PR cask changes:
    - `HOMEBREW_NO_AUTO_UPDATE=1 brew tap-new local/flo-ci`
    - `mkdir -p "$(brew --repository local/flo-ci)/Casks"`
    - `cp Casks/flo.rb "$(brew --repository local/flo-ci)/Casks/flo.rb"`
    - `HOMEBREW_NO_AUTO_UPDATE=1 brew audit --cask --strict --tap local/flo-ci flo`
    - `HOMEBREW_NO_AUTO_UPDATE=1 brew untap local/flo-ci`
-5. Merge the cask bump PR so users can run:
+6. Merge the cask bump PR so users can run:
    - `brew upgrade --cask flo`
-6. Publish release notes with known risks and rollback plan.
-7. Archive signing metadata and, when applicable, notarization logs.
+7. Smoke-check end-user install commands after merge:
+   - `brew update`
+   - `brew cat --cask flo | rg 'version'`
+   - `brew reinstall --cask flo` (or `brew install --cask flo` on a clean machine)
+8. Publish release notes with known risks and rollback plan, including:
+   - Gatekeeper workaround for non-notarized builds:
+     `xattr -dr com.apple.quarantine /Applications/FloApp.app && open /Applications/FloApp.app`
+9. Archive signing metadata and, when applicable, notarization logs.

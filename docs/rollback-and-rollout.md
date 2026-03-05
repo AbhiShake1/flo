@@ -23,7 +23,7 @@ Use these flags to keep the app launchable during incidents while narrowing blas
 ## Rollback Procedure
 
 1. Stop promoting the current build artifact.
-2. Re-publish prior known-good notarized ZIP/DMG.
+2. Re-publish prior known-good ZIP/DMG (notarized when available).
 3. Set feature flags to disable failing flows in the affected build.
 4. Publish incident note with impacted features and workaround.
 5. Validate rollback by rerunning manual smoke harness and automated tests.

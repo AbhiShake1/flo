@@ -13,7 +13,11 @@ This repository can be tapped directly as `AbhiShake1/flo`.
 Tagging `v<version>` triggers `.github/workflows/release.yml`, which:
 1. Builds release artifacts (currently non-notarized).
 2. Publishes the GitHub Release.
-3. Opens a PR that bumps `Casks/flo.rb` version + `sha256` using `scripts/update_cask.sh`.
+3. Pushes a cask bump branch and attempts to open a PR that bumps `Casks/flo.rb`
+   version + `sha256` using `scripts/update_cask.sh`.
+
+If PR creation is disabled for `GITHUB_TOKEN`, open the PR manually from:
+- `chore/homebrew-cask-v<version>`
 
 After that PR is merged, Homebrew users can upgrade with:
 
@@ -25,16 +29,38 @@ brew upgrade --cask flo
 
 ```bash
 brew tap AbhiShake1/flo https://github.com/AbhiShake1/flo
-brew install --cask --no-quarantine flo
+brew install --cask flo
 ```
 
-For first-time bootstrap, merge the first automated cask bump PR after your
+For first-time bootstrap, merge the first cask bump PR (automated or manual) after your
 initial tagged release before asking users to run install.
+
+If Gatekeeper blocks launch on non-notarized builds:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/FloApp.app
+open /Applications/FloApp.app
+```
+
+If Homebrew reports "latest version is already installed" but the app is missing:
+
+```bash
+brew reinstall --cask flo
+```
+
+If local tap metadata appears stale:
+
+```bash
+brew untap abhishake1/flo
+brew tap AbhiShake1/flo https://github.com/AbhiShake1/flo
+brew update
+brew install --cask flo
+```
 
 ## Maintainer Commands
 
 ```bash
-# trigger release + automated cask bump PR
+# trigger release + cask bump update
 git tag v0.1.0
 git push origin v0.1.0
 ```
