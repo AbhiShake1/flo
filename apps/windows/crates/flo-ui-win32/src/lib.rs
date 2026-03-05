@@ -1,3 +1,5 @@
+pub mod shell;
+
 use flo_core::ports::{
     CoreResult, FloatingBarActions, FloatingBarBannerKind, FloatingBarChipModel,
     FloatingBarManaging,
