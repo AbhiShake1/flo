@@ -35,6 +35,7 @@
 - Added exhaustive error-message parity enforcement in `flo-core/tests/error_parity.rs` covering canonical text and trigger mappings.
 - Added elevation relaunch handoff persistence (`flo-platform-win::elevation`) and acceptance coverage for prompt->relaunch->retry success (A7).
 - Promoted P3, P4, P6, P7 milestones plus elevation gate to `Parity` based on deterministic runtime/platform/packaging evidence.
+- Added soak-run tooling (`scripts/run-soak-matrix.sh`) and generated `docs/status/soak-latest.md` to track release-soak progress toward the 48h requirement.
 
 ## Blockers
 - None for scaffold stage.

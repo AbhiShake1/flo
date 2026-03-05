@@ -16,7 +16,7 @@ Status legend: `Not Started`, `In Progress`, `Parity`, `Exception`.
 | P5 | Native Win32 UI parity | Engineer C | Parity | Token/motion/interaction parity now covers recorder chip plus settings/onboarding/permissions/tray/history-provider shell surfaces with deterministic DPI tests and locked spec rows. |
 | P6 | Packaging + update paths | Engineer C | Parity | Feed parsing, checksum validation, staged apply + rollback pointer, ZIP packaging script, MSIX/winget prep script, and release readiness gate scripts are implemented and exercised in preview readiness runs. |
 | P7 | End-to-end parity hardening | All | Parity | Acceptance scenarios A1-A7 plus deterministic runtime fault-injection coverage (oauth/audio/capture/tts/selection/injection/elevation) are automated and green in `flo-app`. |
-| P8 | Release readiness + soak | All + QA | In Progress | Release checklist (`07-release-readiness-checklist.md`) and gate scripts (`scripts/release-readiness.sh`, `scripts/verify-parity-gates.sh`) are in place; 48h soak and strict-gate signoff pending. |
+| P8 | Release readiness + soak | All + QA | In Progress | Release checklist + gate scripts are in place; soak runner (`scripts/run-soak-matrix.sh`) and latest soak log (`docs/status/soak-latest.md`) are active; 48h soak completion + strict-gate signoff pending. |
 
 ## Gate tracker (release blockers)
 

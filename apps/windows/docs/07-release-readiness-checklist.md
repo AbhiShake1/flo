@@ -15,9 +15,11 @@ Use this checklist for Windows parity release candidates.
    - `apps/windows/scripts/release-readiness.sh preview`
 2. Strict gate run (required for release candidate):
    - `apps/windows/scripts/release-readiness.sh strict`
-3. ZIP package generation:
+3. Soak matrix runner (progress/evidence log):
+   - `apps/windows/scripts/run-soak-matrix.sh <runs> <interval_seconds> <out_file>`
+4. ZIP package generation:
    - `apps/windows/scripts/package-zip.sh <version>`
-4. MSIX/winget prep (GA blocked until signing readiness):
+5. MSIX/winget prep (GA blocked until signing readiness):
    - `SIGNING_READY=true RELEASE_CHANNEL=ga apps/windows/scripts/prepare-msix-winget.sh <version>`
 
 ## 48h Soak Protocol
