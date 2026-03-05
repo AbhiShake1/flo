@@ -1,0 +1,22 @@
+[package]
+name = "flo-platform-win"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+flo-core = { path = "../flo-core" }
+flo-domain = { path = "../flo-domain" }
+hex.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+  "Win32_Foundation",
+  "Win32_Security_Credentials",
+  "Win32_Security_Cryptography",
+  "Win32_System_Threading",
+  "Win32_UI_Accessibility",
+  "Win32_UI_Input_KeyboardAndMouse",
+] }

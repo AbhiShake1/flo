@@ -1,0 +1,11 @@
+[package]
+name = "flo-core"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+flo-domain = { path = "../flo-domain" }
+serde.workspace = true
+thiserror.workspace = true
