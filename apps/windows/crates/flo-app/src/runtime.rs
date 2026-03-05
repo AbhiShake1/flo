@@ -3,8 +3,9 @@ use std::collections::VecDeque;
 use flo_core::{
     controller::{ControllerEffect, ControllerEvent, FloController},
     ports::{
-        CoreError, ElevationPromptOutcome, ElevationService, FloatingBarChipModel,
-        FloatingBarManaging, PermissionsService, SelectionReaderService, TextInjectionService,
+        CoreError, DictationPreferencesStore, ElevationPromptOutcome, ElevationService,
+        FloatingBarChipModel, FloatingBarManaging, PermissionsService, SelectionReaderService,
+        TextInjectionService, VoicePreferencesStore,
     },
 };
 use flo_domain::PlatformErrorCode;
@@ -15,6 +16,8 @@ pub struct EffectRuntime<'a> {
     elevation_service: &'a mut dyn ElevationService,
     permissions_service: &'a mut dyn PermissionsService,
     floating_bar: &'a mut dyn FloatingBarManaging,
+    dictation_preferences_store: &'a mut dyn DictationPreferencesStore,
+    voice_preferences_store: &'a mut dyn VoicePreferencesStore,
 }
 
 impl<'a> EffectRuntime<'a> {
@@ -24,6 +27,8 @@ impl<'a> EffectRuntime<'a> {
         elevation_service: &'a mut dyn ElevationService,
         permissions_service: &'a mut dyn PermissionsService,
         floating_bar: &'a mut dyn FloatingBarManaging,
+        dictation_preferences_store: &'a mut dyn DictationPreferencesStore,
+        voice_preferences_store: &'a mut dyn VoicePreferencesStore,
     ) -> Self {
         Self {
             selection_reader,
@@ -31,6 +36,8 @@ impl<'a> EffectRuntime<'a> {
             elevation_service,
             permissions_service,
             floating_bar,
+            dictation_preferences_store,
+            voice_preferences_store,
         }
     }
 
@@ -105,12 +112,50 @@ impl<'a> EffectRuntime<'a> {
                 let status = self.permissions_service.refresh_status();
                 vec![ControllerEvent::PermissionStatusUpdated(status)]
             }
+            ControllerEffect::RequestPermission(permission) => {
+                let request_result = match permission {
+                    flo_domain::PermissionKind::Microphone => self
+                        .permissions_service
+                        .request_microphone_access()
+                        .map(|_| ()),
+                    flo_domain::PermissionKind::Accessibility
+                    | flo_domain::PermissionKind::InputMonitoring => self
+                        .permissions_service
+                        .open_settings_target(*permission)
+                        .map(|_| ()),
+                };
+
+                if let Err(error) = request_result {
+                    return vec![ControllerEvent::Error(error.error_code())];
+                }
+
+                let status = self.permissions_service.refresh_status();
+                vec![ControllerEvent::PermissionStatusUpdated(status)]
+            }
             ControllerEffect::RequestMicrophoneAccess => {
                 if let Err(error) = self.permissions_service.request_microphone_access() {
                     return vec![ControllerEvent::Error(error.error_code())];
                 }
                 let status = self.permissions_service.refresh_status();
                 vec![ControllerEvent::PermissionStatusUpdated(status)]
+            }
+            ControllerEffect::PersistRewritePreferences => {
+                if let Err(error) = self
+                    .dictation_preferences_store
+                    .save(&controller.state.dictation_rewrite_preferences)
+                {
+                    return vec![ControllerEvent::Error(error.error_code())];
+                }
+                Vec::new()
+            }
+            ControllerEffect::PersistVoicePreferences => {
+                if let Err(error) = self
+                    .voice_preferences_store
+                    .save(&controller.state.voice_preferences)
+                {
+                    return vec![ControllerEvent::Error(error.error_code())];
+                }
+                Vec::new()
             }
             ControllerEffect::OpenSystemSettings(permission) => {
                 if let Err(error) = self.permissions_service.open_settings_target(*permission) {
@@ -167,11 +212,14 @@ mod tests {
     use flo_core::{
         capabilities::PlatformCapabilities,
         controller::FloCommand,
-        ports::{CoreResult, FloatingBarActions, PermissionSettingsTarget},
+        ports::{
+            CoreResult, DictationPreferencesStore, FloatingBarActions, PermissionSettingsTarget,
+            VoicePreferencesStore,
+        },
     };
     use flo_domain::{
-        AppIntegrityLevel, PermissionKind, PermissionState, PermissionStatus, SelectionReadMethod,
-        TextInjectionFailureReason,
+        AppIntegrityLevel, DictationRewritePreferences, PermissionKind, PermissionState,
+        PermissionStatus, SelectionReadMethod, TextInjectionFailureReason, VoicePreferences,
     };
 
     use super::*;
@@ -237,6 +285,7 @@ mod tests {
 
     struct FakePermissionsService {
         status: PermissionStatus,
+        opened_targets: Vec<PermissionKind>,
     }
 
     impl PermissionsService for FakePermissionsService {
@@ -253,6 +302,7 @@ mod tests {
             &mut self,
             permission: PermissionKind,
         ) -> CoreResult<PermissionSettingsTarget> {
+            self.opened_targets.push(permission);
             Ok(match permission {
                 PermissionKind::Microphone => PermissionSettingsTarget::MicrophonePrivacy,
                 PermissionKind::Accessibility => PermissionSettingsTarget::AccessibilityPrivacy,
@@ -283,6 +333,46 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct FakeDictationPreferencesStore {
+        saved: Option<DictationRewritePreferences>,
+        fail: bool,
+    }
+
+    impl DictationPreferencesStore for FakeDictationPreferencesStore {
+        fn load(&self) -> DictationRewritePreferences {
+            self.saved.clone().unwrap_or_default()
+        }
+
+        fn save(&mut self, preferences: &DictationRewritePreferences) -> CoreResult<()> {
+            if self.fail {
+                return Err(CoreError::Io("dictation save failed".to_string()));
+            }
+            self.saved = Some(preferences.clone());
+            Ok(())
+        }
+    }
+
+    #[derive(Default)]
+    struct FakeVoicePreferencesStore {
+        saved: Option<VoicePreferences>,
+        fail: bool,
+    }
+
+    impl VoicePreferencesStore for FakeVoicePreferencesStore {
+        fn load(&self) -> VoicePreferences {
+            self.saved.clone().unwrap_or_default()
+        }
+
+        fn save(&mut self, preferences: &VoicePreferences) -> CoreResult<()> {
+            if self.fail {
+                return Err(CoreError::Io("voice save failed".to_string()));
+            }
+            self.saved = Some(preferences.clone());
+            Ok(())
+        }
+    }
+
     #[test]
     fn drive_effects_processes_read_selected_and_updates_controller_state() {
         let mut controller = FloController::new();
@@ -299,8 +389,11 @@ mod tests {
         };
         let mut permissions = FakePermissionsService {
             status: PermissionStatus::default(),
+            opened_targets: Vec::new(),
         };
         let mut floating = FakeFloatingBarService::default();
+        let mut dictation_store = FakeDictationPreferencesStore::default();
+        let mut voice_store = FakeVoicePreferencesStore::default();
 
         let mut runtime = EffectRuntime::new(
             &mut selection,
@@ -308,6 +401,8 @@ mod tests {
             &mut elevation,
             &mut permissions,
             &mut floating,
+            &mut dictation_store,
+            &mut voice_store,
         );
 
         let effects = controller.dispatch(
@@ -337,8 +432,11 @@ mod tests {
         };
         let mut permissions = FakePermissionsService {
             status: PermissionStatus::default(),
+            opened_targets: Vec::new(),
         };
         let mut floating = FakeFloatingBarService::default();
+        let mut dictation_store = FakeDictationPreferencesStore::default();
+        let mut voice_store = FakeVoicePreferencesStore::default();
 
         let mut runtime = EffectRuntime::new(
             &mut selection,
@@ -346,6 +444,8 @@ mod tests {
             &mut elevation,
             &mut permissions,
             &mut floating,
+            &mut dictation_store,
+            &mut voice_store,
         );
 
         runtime.drive_effects(&mut controller, vec![ControllerEffect::PromptForElevation]);
@@ -371,8 +471,11 @@ mod tests {
                 accessibility: PermissionState::Granted,
                 input_monitoring: PermissionState::NotDetermined,
             },
+            opened_targets: Vec::new(),
         };
         let mut floating = FakeFloatingBarService::default();
+        let mut dictation_store = FakeDictationPreferencesStore::default();
+        let mut voice_store = FakeVoicePreferencesStore::default();
 
         let mut runtime = EffectRuntime::new(
             &mut selection,
@@ -380,6 +483,8 @@ mod tests {
             &mut elevation,
             &mut permissions,
             &mut floating,
+            &mut dictation_store,
+            &mut voice_store,
         );
 
         runtime.drive_effects(&mut controller, vec![ControllerEffect::RefreshPermissions]);
@@ -391,6 +496,142 @@ mod tests {
         assert_eq!(
             controller.state.permission_status.input_monitoring,
             PermissionState::NotDetermined
+        );
+    }
+
+    #[test]
+    fn drive_effects_handles_request_permission_for_non_microphone_targets() {
+        let mut controller = FloController::new();
+        let mut selection = FakeSelectionService { read: None };
+        let mut injection = FakeTextInjectionService::default();
+        let mut elevation = FakeElevationService {
+            outcome: ElevationPromptOutcome::AlreadyElevated,
+            fail: false,
+        };
+        let mut permissions = FakePermissionsService {
+            status: PermissionStatus::default(),
+            opened_targets: Vec::new(),
+        };
+        let mut floating = FakeFloatingBarService::default();
+        let mut dictation_store = FakeDictationPreferencesStore::default();
+        let mut voice_store = FakeVoicePreferencesStore::default();
+
+        let mut runtime = EffectRuntime::new(
+            &mut selection,
+            &mut injection,
+            &mut elevation,
+            &mut permissions,
+            &mut floating,
+            &mut dictation_store,
+            &mut voice_store,
+        );
+
+        runtime.drive_effects(
+            &mut controller,
+            vec![ControllerEffect::RequestPermission(
+                flo_domain::PermissionKind::Accessibility,
+            )],
+        );
+
+        assert_eq!(
+            permissions.opened_targets,
+            vec![PermissionKind::Accessibility]
+        );
+    }
+
+    #[test]
+    fn drive_effects_persists_voice_and_rewrite_preferences() {
+        let mut controller = FloController::new();
+        controller.state.voice_preferences.voice = "verse".to_string();
+        controller.state.voice_preferences.speed = 1.4;
+        controller
+            .state
+            .dictation_rewrite_preferences
+            .custom_instructions = "short bullets".to_string();
+
+        let mut selection = FakeSelectionService { read: None };
+        let mut injection = FakeTextInjectionService::default();
+        let mut elevation = FakeElevationService {
+            outcome: ElevationPromptOutcome::AlreadyElevated,
+            fail: false,
+        };
+        let mut permissions = FakePermissionsService {
+            status: PermissionStatus::default(),
+            opened_targets: Vec::new(),
+        };
+        let mut floating = FakeFloatingBarService::default();
+        let mut dictation_store = FakeDictationPreferencesStore::default();
+        let mut voice_store = FakeVoicePreferencesStore::default();
+
+        let mut runtime = EffectRuntime::new(
+            &mut selection,
+            &mut injection,
+            &mut elevation,
+            &mut permissions,
+            &mut floating,
+            &mut dictation_store,
+            &mut voice_store,
+        );
+
+        runtime.drive_effects(
+            &mut controller,
+            vec![
+                ControllerEffect::PersistVoicePreferences,
+                ControllerEffect::PersistRewritePreferences,
+            ],
+        );
+
+        assert_eq!(
+            voice_store.saved.as_ref().map(|saved| saved.voice.as_str()),
+            Some("verse")
+        );
+        assert_eq!(
+            dictation_store
+                .saved
+                .as_ref()
+                .map(|saved| saved.custom_instructions.as_str()),
+            Some("short bullets")
+        );
+    }
+
+    #[test]
+    fn drive_effects_maps_preference_store_failures_to_persistence_error() {
+        let mut controller = FloController::new();
+        let mut selection = FakeSelectionService { read: None };
+        let mut injection = FakeTextInjectionService::default();
+        let mut elevation = FakeElevationService {
+            outcome: ElevationPromptOutcome::AlreadyElevated,
+            fail: false,
+        };
+        let mut permissions = FakePermissionsService {
+            status: PermissionStatus::default(),
+            opened_targets: Vec::new(),
+        };
+        let mut floating = FakeFloatingBarService::default();
+        let mut dictation_store = FakeDictationPreferencesStore {
+            saved: None,
+            fail: true,
+        };
+        let mut voice_store = FakeVoicePreferencesStore::default();
+
+        let mut runtime = EffectRuntime::new(
+            &mut selection,
+            &mut injection,
+            &mut elevation,
+            &mut permissions,
+            &mut floating,
+            &mut dictation_store,
+            &mut voice_store,
+        );
+
+        runtime.drive_effects(
+            &mut controller,
+            vec![ControllerEffect::PersistRewritePreferences],
+        );
+
+        assert_eq!(
+            controller.state.status_message.as_deref(),
+            Some("Persistence error: Unknown")
         );
     }
 }
