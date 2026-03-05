@@ -1,3 +1,4 @@
+pub mod adapters;
 pub mod audio;
 pub mod elevation;
 pub mod history;
