@@ -33,6 +33,8 @@
 - Marked P0 spec-freeze milestone as `Parity` in the tracker now that governance artifacts are in place and wired into gate scripts.
 - Locked all UI surface rows in `05-ui-parity-spec.md` and added deterministic shell token/motion coverage (`flo-ui-win32::shell`) for settings/onboarding/permissions/tray/history-provider surfaces.
 - Added exhaustive error-message parity enforcement in `flo-core/tests/error_parity.rs` covering canonical text and trigger mappings.
+- Added elevation relaunch handoff persistence (`flo-platform-win::elevation`) and acceptance coverage for prompt->relaunch->retry success (A7).
+- Promoted P3, P4, P6, P7 milestones plus elevation gate to `Parity` based on deterministic runtime/platform/packaging evidence.
 
 ## Blockers
 - None for scaffold stage.
