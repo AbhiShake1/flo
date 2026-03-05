@@ -1,9 +1,12 @@
 use std::collections::HashMap;
 
-use flo_domain::ProviderRoutingOverrides;
+use flo_domain::{ProviderRoutingOverrides, UserSession};
 use flo_provider::{
     config::FloConfiguration,
-    oauth::parse_oauth_callback_input,
+    oauth::{
+        evaluate_session_refresh, parse_oauth_callback_input, OAuthCallbackParseError,
+        SessionRefreshDecision,
+    },
     routing::{build_attempt_plan, merge_routing_overrides},
 };
 
@@ -111,5 +114,89 @@ fn failover_attempt_plan_is_deterministic_integration() {
             (5, "openai", 0),
             (6, "openai", 1),
         ]
+    );
+}
+
+#[test]
+fn oauth_callback_failure_branches_are_deterministic() {
+    let mut env = HashMap::new();
+    env.insert("FLO_OAUTH_ENABLED".to_string(), "true".to_string());
+    env.insert(
+        "FLO_OAUTH_ALLOWED_HOSTS".to_string(),
+        "localhost".to_string(),
+    );
+
+    let config = FloConfiguration::from_env_map(&env)
+        .expect("valid config")
+        .oauth
+        .expect("oauth enabled");
+
+    let wrong_host = parse_oauth_callback_input(
+        "https://evil.example.com/auth/callback?code=ok&state=s",
+        "s",
+        &config,
+    )
+    .expect_err("wrong host must fail");
+    assert!(matches!(
+        wrong_host,
+        OAuthCallbackParseError::HostNotAllowed(_)
+    ));
+
+    let wrong_state = parse_oauth_callback_input(
+        "http://localhost:1455/auth/callback?code=ok&state=other",
+        "s",
+        &config,
+    )
+    .expect_err("state mismatch must fail");
+    assert_eq!(wrong_state, OAuthCallbackParseError::StateMismatch);
+
+    let missing_code =
+        parse_oauth_callback_input("http://localhost:1455/auth/callback?state=s", "s", &config)
+            .expect_err("missing code must fail");
+    assert_eq!(
+        missing_code,
+        OAuthCallbackParseError::AuthorizationCodeMissing
+    );
+}
+
+#[test]
+fn session_refresh_lifecycle_decisions_are_deterministic() {
+    let valid_session = UserSession {
+        access_token: "a".to_string(),
+        refresh_token: Some("r".to_string()),
+        token_type: "Bearer".to_string(),
+        expires_at_unix_ms: 200_000,
+        account_id: None,
+    };
+    let near_expiry_session = UserSession {
+        access_token: "a".to_string(),
+        refresh_token: Some("r".to_string()),
+        token_type: "Bearer".to_string(),
+        expires_at_unix_ms: 1_200,
+        account_id: None,
+    };
+    let expired_without_refresh = UserSession {
+        access_token: "a".to_string(),
+        refresh_token: None,
+        token_type: "Bearer".to_string(),
+        expires_at_unix_ms: 1_000,
+        account_id: None,
+    };
+
+    assert_eq!(
+        evaluate_session_refresh(Some(&valid_session), 1_000, 60_000),
+        SessionRefreshDecision::SessionValid
+    );
+    assert_eq!(
+        evaluate_session_refresh(Some(&near_expiry_session), 1_000, 60_000),
+        SessionRefreshDecision::RefreshRequired
+    );
+    assert_eq!(
+        evaluate_session_refresh(Some(&expired_without_refresh), 1_500, 60_000),
+        SessionRefreshDecision::ReauthenticateRequired
+    );
+    assert_eq!(
+        evaluate_session_refresh(None, 1_500, 60_000),
+        SessionRefreshDecision::ReauthenticateRequired
     );
 }

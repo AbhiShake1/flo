@@ -6,32 +6,32 @@ Status legend: `Not Started`, `In Progress`, `Parity`, `Exception`.
 
 | ID | macOS public action | Windows equivalent | Evidence | Status |
 |---|---|---|---|---|
-| A01 | `providerDisplayName(for provider: AIProvider) -> String` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A02 | `providerLogoURL(for provider: AIProvider) -> URL?` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A03 | `providerModels(for provider: AIProvider, matching query: String = "") -> [ModelsDevModelEntry]` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A04 | `activeRewriteModel(for provider: AIProvider) -> String` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A05 | `rewriteModelOverride(for provider: AIProvider) -> String?` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A06 | `rewriteModelOverride(for provider: AIProvider, credentialIndex: Int) -> String?` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A07 | `activeRewriteModel(for provider: AIProvider, credentialIndex: Int) -> String` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A08 | `setRewriteModel(_ modelID: String, for provider: AIProvider)` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A09 | `clearRewriteModelOverride(for provider: AIProvider)` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A10 | `setRewriteModel(_ modelID: String, for provider: AIProvider, credentialIndex: Int)` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A11 | `clearRewriteModelOverride(for provider: AIProvider, credentialIndex: Int)` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A12 | `refreshModelsDevCatalog(forceRefresh: Bool = false) async` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A13 | `providerSupportsOAuth(_ provider: AIProvider) -> Bool` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A14 | `providerCredentialSourceLabel(for provider: AIProvider) -> String?` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A15 | `canRemoveSavedProviderCredential(for provider: AIProvider) -> Bool` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A16 | `configuredKeyCount(for provider: AIProvider) -> Int` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A17 | `providerCredentials(for provider: AIProvider) -> [String]` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A18 | `copyProviderCredential(at index: Int, for provider: AIProvider) -> Bool` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A19 | `addProviderCredential(_ credential: String, for provider: AIProvider)` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A20 | `updateProviderCredential(_ credential: String, at index: Int, for provider: AIProvider)` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A21 | `removeProviderCredential(at index: Int, for provider: AIProvider) async` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A22 | `reorderProviderCredentials(_ credentials: [String], for provider: AIProvider)` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A23 | `providerSupportsFailoverOperation(_ provider: AIProvider) -> Bool` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A24 | `providerEnabledForFailover(_ provider: AIProvider) -> Bool` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A25 | `canMoveProviderUpInFailoverOrder(_ provider: AIProvider) -> Bool` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A26 | `canMoveProviderDownInFailoverOrder(_ provider: AIProvider) -> Bool` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
+| A01 | `providerDisplayName(for provider: AIProvider) -> String` | `FloController::provider_display_name` | `flo-core/src/controller.rs` query-helper tests | In Progress |
+| A02 | `providerLogoURL(for provider: AIProvider) -> URL?` | `FloController::provider_logo_url` | `flo-core/src/controller.rs` query-helper tests | In Progress |
+| A03 | `providerModels(for provider: AIProvider, matching query: String = "") -> [ModelsDevModelEntry]` | `FloController::provider_models` + `ControllerEvent::ModelsCatalogLoaded` | `flo-core/src/controller.rs` reducer/query tests | In Progress |
+| A04 | `activeRewriteModel(for provider: AIProvider) -> String` | `FloController::active_rewrite_model` | `flo-core/src/controller.rs` query-helper tests | In Progress |
+| A05 | `rewriteModelOverride(for provider: AIProvider) -> String?` | `FloController::rewrite_model_override` | `flo-core/src/controller.rs` query-helper tests | In Progress |
+| A06 | `rewriteModelOverride(for provider: AIProvider, credentialIndex: Int) -> String?` | `FloController::rewrite_model_override_for_credential` | `flo-core/src/controller.rs` query-helper tests | In Progress |
+| A07 | `activeRewriteModel(for provider: AIProvider, credentialIndex: Int) -> String` | `FloController::active_rewrite_model_for_credential` | `flo-core/src/controller.rs` query-helper tests | In Progress |
+| A08 | `setRewriteModel(_ modelID: String, for provider: AIProvider)` | `FloCommand::SetRewriteModelForProvider` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A09 | `clearRewriteModelOverride(for provider: AIProvider)` | `FloCommand::ClearRewriteModelOverrideForProvider` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A10 | `setRewriteModel(_ modelID: String, for provider: AIProvider, credentialIndex: Int)` | `FloCommand::SetRewriteModelForProviderCredential` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A11 | `clearRewriteModelOverride(for provider: AIProvider, credentialIndex: Int)` | `FloCommand::ClearRewriteModelOverrideForProviderCredential` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A12 | `refreshModelsDevCatalog(forceRefresh: Bool = false) async` | `FloCommand::RefreshModelsDevCatalog` + `ControllerEvent::ModelsCatalogLoaded` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A13 | `providerSupportsOAuth(_ provider: AIProvider) -> Bool` | `FloController::provider_supports_oauth` | `flo-core/src/controller.rs` query-helper tests | In Progress |
+| A14 | `providerCredentialSourceLabel(for provider: AIProvider) -> String?` | `FloController::provider_credential_source_label` | `flo-core/src/controller.rs` query-helper tests | In Progress |
+| A15 | `canRemoveSavedProviderCredential(for provider: AIProvider) -> Bool` | `FloController::can_remove_saved_provider_credential` | `flo-core/src/controller.rs` query-helper tests | In Progress |
+| A16 | `configuredKeyCount(for provider: AIProvider) -> Int` | `FloController::configured_key_count` | `flo-core/src/controller.rs` query-helper tests | In Progress |
+| A17 | `providerCredentials(for provider: AIProvider) -> [String]` | `FloController::provider_credentials` | `flo-core/src/controller.rs` query-helper tests | In Progress |
+| A18 | `copyProviderCredential(at index: Int, for provider: AIProvider) -> Bool` | `FloCommand::CopyProviderCredential` + `ControllerEffect::CopyToClipboard` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A19 | `addProviderCredential(_ credential: String, for provider: AIProvider)` | `FloCommand::AddProviderCredential` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A20 | `updateProviderCredential(_ credential: String, at index: Int, for provider: AIProvider)` | `FloCommand::UpdateProviderCredential` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A21 | `removeProviderCredential(at index: Int, for provider: AIProvider) async` | `FloCommand::RemoveProviderCredential` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A22 | `reorderProviderCredentials(_ credentials: [String], for provider: AIProvider)` | `FloCommand::ReorderProviderCredentials` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A23 | `providerSupportsFailoverOperation(_ provider: AIProvider) -> Bool` | `FloController::provider_supports_failover_operation` | `flo-core/src/controller.rs` query-helper tests | In Progress |
+| A24 | `providerEnabledForFailover(_ provider: AIProvider) -> Bool` | `FloController::provider_enabled_for_failover` | `flo-core/src/controller.rs` query-helper tests | In Progress |
+| A25 | `canMoveProviderUpInFailoverOrder(_ provider: AIProvider) -> Bool` | `FloController::can_move_provider_up_in_failover_order` | `flo-core/src/controller.rs` query-helper tests | In Progress |
+| A26 | `canMoveProviderDownInFailoverOrder(_ provider: AIProvider) -> Bool` | `FloController::can_move_provider_down_in_failover_order` | `flo-core/src/controller.rs` query-helper tests | In Progress |
 | A27 | `moveProviderUpInFailoverOrder(_ provider: AIProvider)` | `FloCommand::MoveProviderUpInFailoverOrder` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A28 | `moveProviderDownInFailoverOrder(_ provider: AIProvider)` | `FloCommand::MoveProviderDownInFailoverOrder` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A29 | `reorderProvidersInFailoverOrder(_ providers: [AIProvider])` | `FloCommand::ReorderProvidersInFailoverOrder` | `flo-core/src/controller.rs` reducer tests | In Progress |
@@ -44,16 +44,16 @@ Status legend: `Not Started`, `In Progress`, `Parity`, `Exception`.
 | A36 | `setFailoverCooldownSeconds(_ value: Int)` | `FloCommand::SetFailoverCooldownSeconds` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A37 | `bootstrap() async` | `FloCommand::Bootstrap` + `ControllerEvent::AuthRestored` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A38 | `login() async` | `FloCommand::Login` + OAuth callback parser contract | `flo-provider/src/oauth.rs` tests | In Progress |
-| A39 | `saveProviderCredential(_ credential: String)` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A40 | `saveProviderCredential(_ credential: String, for provider: AIProvider)` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A41 | `removeSavedProviderCredential() async` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A42 | `removeSavedProviderCredential(for provider: AIProvider) async` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
+| A39 | `saveProviderCredential(_ credential: String)` | `FloCommand::SaveProviderCredential` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A40 | `saveProviderCredential(_ credential: String, for provider: AIProvider)` | `FloCommand::SaveProviderCredentialForProvider` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A41 | `removeSavedProviderCredential() async` | `FloCommand::RemoveSavedProviderCredential` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A42 | `removeSavedProviderCredential(for provider: AIProvider) async` | `FloCommand::RemoveSavedProviderCredentialForProvider` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A43 | `logout() async` | `FloCommand::Logout` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A44 | `refreshPermissions()` | `FloCommand::RefreshPermissions` | `flo-core/src/controller.rs` reducer tests | In Progress |
-| A45 | `requestMicrophoneAccess() async` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
+| A45 | `requestMicrophoneAccess() async` | `FloCommand::RequestMicrophoneAccess` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A46 | `requestPermission(_ permission: PermissionKind) async` | `FloCommand::RequestPermission` | `flo-core/src/controller.rs` reducer tests | In Progress |
-| A47 | `promptForRequiredPermissions() async` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A48 | `openSystemSettings(for permission: PermissionKind)` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
+| A47 | `promptForRequiredPermissions() async` | `FloCommand::PromptForRequiredPermissions` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A48 | `openSystemSettings(for permission: PermissionKind)` | `FloCommand::OpenSystemSettings` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A49 | `updateShortcut(action: ShortcutAction, combo: KeyCombo)` | `FloCommand::UpdateShortcut` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A50 | `resetShortcutsToDefault()` | `FloCommand::ResetShortcutsToDefault` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A51 | `pasteLastTranscript()` | `FloCommand::PasteLastTranscript` | `flo-core/src/controller.rs` reducer tests | In Progress |

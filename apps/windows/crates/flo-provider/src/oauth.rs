@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use flo_domain::UserSession;
 use thiserror::Error;
 use url::{form_urlencoded, Url};
 
@@ -31,6 +32,38 @@ pub enum OAuthCallbackParseError {
 pub struct ParsedOAuthCallback {
     pub code: String,
     pub state: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionRefreshDecision {
+    SessionValid,
+    RefreshRequired,
+    ReauthenticateRequired,
+}
+
+pub fn evaluate_session_refresh(
+    session: Option<&UserSession>,
+    now_unix_ms: i64,
+    refresh_skew_ms: i64,
+) -> SessionRefreshDecision {
+    let Some(session) = session else {
+        return SessionRefreshDecision::ReauthenticateRequired;
+    };
+
+    let expires_in_ms = session.expires_at_unix_ms.saturating_sub(now_unix_ms);
+    if expires_in_ms > refresh_skew_ms {
+        return SessionRefreshDecision::SessionValid;
+    }
+
+    if session
+        .refresh_token
+        .as_deref()
+        .is_some_and(|token| !token.trim().is_empty())
+    {
+        SessionRefreshDecision::RefreshRequired
+    } else {
+        SessionRefreshDecision::ReauthenticateRequired
+    }
 }
 
 pub fn parse_oauth_callback_input(
@@ -132,7 +165,12 @@ fn parse_from_pairs(
 mod tests {
     use std::collections::{HashMap, HashSet};
 
-    use super::{parse_oauth_callback_input, OAuthCallbackParseError};
+    use flo_domain::UserSession;
+
+    use super::{
+        evaluate_session_refresh, parse_oauth_callback_input, OAuthCallbackParseError,
+        SessionRefreshDecision,
+    };
     use crate::config::FloConfiguration;
 
     fn oauth_config() -> crate::config::OAuthConfiguration {
@@ -215,5 +253,79 @@ mod tests {
         .expect_err("expected missing code");
 
         assert_eq!(err, OAuthCallbackParseError::AuthorizationCodeMissing);
+    }
+
+    #[test]
+    fn rejects_empty_oauth_input() {
+        let config = oauth_config();
+        let err = parse_oauth_callback_input("  ", "s1", &config)
+            .expect_err("empty callback input must fail");
+        assert_eq!(err, OAuthCallbackParseError::EmptyInput);
+    }
+
+    #[test]
+    fn rejects_unsupported_callback_scheme() {
+        let config = oauth_config();
+        let err = parse_oauth_callback_input(
+            "ftp://localhost/auth/callback?code=a&state=s1",
+            "s1",
+            &config,
+        )
+        .expect_err("unsupported scheme should fail");
+        assert!(matches!(err, OAuthCallbackParseError::UnsupportedScheme(_)));
+    }
+
+    #[test]
+    fn rejects_originator_mismatch() {
+        let config = oauth_config();
+        let err = parse_oauth_callback_input(
+            "http://localhost:1455/auth/callback?code=a&state=s1&originator=bad",
+            "s1",
+            &config,
+        )
+        .expect_err("originator mismatch should fail");
+        assert_eq!(err, OAuthCallbackParseError::OriginatorMismatch);
+    }
+
+    #[test]
+    fn refresh_decision_requires_refresh_for_expired_session_with_refresh_token() {
+        let session = UserSession {
+            access_token: "a".to_string(),
+            refresh_token: Some("r".to_string()),
+            token_type: "Bearer".to_string(),
+            expires_at_unix_ms: 1_000,
+            account_id: None,
+        };
+
+        let decision = evaluate_session_refresh(Some(&session), 1_500, 60_000);
+        assert_eq!(decision, SessionRefreshDecision::RefreshRequired);
+    }
+
+    #[test]
+    fn refresh_decision_requires_reauth_when_refresh_token_missing() {
+        let session = UserSession {
+            access_token: "a".to_string(),
+            refresh_token: None,
+            token_type: "Bearer".to_string(),
+            expires_at_unix_ms: 1_000,
+            account_id: None,
+        };
+
+        let decision = evaluate_session_refresh(Some(&session), 1_500, 60_000);
+        assert_eq!(decision, SessionRefreshDecision::ReauthenticateRequired);
+    }
+
+    #[test]
+    fn refresh_decision_stays_valid_when_not_near_expiry() {
+        let session = UserSession {
+            access_token: "a".to_string(),
+            refresh_token: Some("r".to_string()),
+            token_type: "Bearer".to_string(),
+            expires_at_unix_ms: 200_000,
+            account_id: None,
+        };
+
+        let decision = evaluate_session_refresh(Some(&session), 1_500, 60_000);
+        assert_eq!(decision, SessionRefreshDecision::SessionValid);
     }
 }

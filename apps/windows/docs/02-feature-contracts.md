@@ -26,6 +26,8 @@ Windows must satisfy port contracts equivalent to macOS protocols while preservi
 3. Selection extraction is UIA-first with clipboard fallback metadata preserved via `SelectionReadMethod`.
 4. Injection failures must be typed (`SecureField`, `IntegrityMismatch`, `GenericFailure`) for canonical error mapping.
 5. Elevated-target mismatch must produce explicit elevation prompt effect/event flow.
+6. Provider credential CRUD flows and API-key auth mode transitions are reducer-driven and test-backed.
+7. Permission prompting orchestration (`request microphone`, `open settings`, `refresh`) is reducer-driven and deterministic.
 
 ## Domain contracts (`flo_domain`)
 
@@ -46,6 +48,8 @@ The platform-neutral key model remains `flo_domain::keys::LogicalKey`.
 - Side-effect results are represented by `ControllerEvent` (`AuthRestored`, `CaptureStopped`, `SelectionRead`, `InjectionCompleted`, `InjectionFailed`, `ElevatedRelaunchRequested`, `PermissionStatusUpdated`, etc.).
 - Live dictation finalization uses deterministic plan output (`InjectDelta`, `ReplaceWithFinal`, `CopyFinalToClipboard`, `Noop`).
 - Canonical user message mapping is driven by `PlatformErrorCode`.
+- Provider/model-query actions and rewrite-model override mutations are represented as reducer commands/events.
+- Clipboard-copy intents (e.g., provider key copy) are emitted as explicit effects.
 
 ## Provider contracts (`flo_provider`)
 
