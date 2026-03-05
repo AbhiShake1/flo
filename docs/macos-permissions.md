@@ -1,5 +1,7 @@
 # macOS Permission Requirements
 
+The macOS app package lives in `apps/macos`. Root `./scripts/*` commands are compatibility wrappers that forward to `apps/macos/scripts/*`.
+
 For production app bundles, ensure the final app target includes these usage descriptions:
 
 - `NSMicrophoneUsageDescription`: explain why dictation needs microphone access.

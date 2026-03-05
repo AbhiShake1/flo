@@ -1,7 +1,11 @@
 # flo
 
-`flo` is a macOS 15+ menu bar app for global dictation and read-aloud shortcuts.
-It supports multi-provider key pools and failover routing via `.env.local`.
+`flo` is a desktop voice productivity project.
+
+- `apps/macos`: native macOS 15+ menu bar app for global dictation and read-aloud shortcuts.
+- `apps/windows`: native Windows app scaffold (implementation pending).
+
+The macOS app supports multi-provider key pools and failover routing via `.env.local`.
 
 ## Open Source
 
@@ -37,13 +41,12 @@ It supports multi-provider key pools and failover routing via `.env.local`.
 
 ## Project Structure
 
-- `Sources/AppCore`: domain models, protocols, defaults, and shortcut validation.
-- `Sources/Infrastructure`: concrete integrations (OAuth, keychain, audio, hotkeys, network, persistence).
-- `Sources/Features`: orchestration layer (`AppEnvironment`, `FloController`, shortcut/voice catalogs).
-- `Sources/FloApp`: SwiftUI app entrypoint and settings/auth UI shell.
-- `Tests/AppCoreTests`: unit tests for core validation logic.
-- `Tests/InfrastructureTests`: integration-focused tests for retry policy, host allowlisting, and storage.
-- `Tests/FeaturesTests`: controller state/error transition tests with mocked dependencies.
+- `apps/macos/Package.swift`: Swift package manifest for the macOS app.
+- `apps/macos/Sources`: macOS modules (`AppCore`, `Infrastructure`, `Features`, `FloApp`).
+- `apps/macos/Tests`: macOS test suites.
+- `apps/macos/scripts`: macOS app build/release/dev scripts.
+- `apps/windows`: Windows native app scaffold and architecture notes.
+- `scripts`: root wrappers for macOS scripts + repo-level automation scripts.
 - `.github/workflows`: CI, dependency review, security scans, and release automation.
 
 ## Configuration
@@ -84,7 +87,7 @@ Release-only environment variables:
 - `FLO_RELEASE_VERSION` (required for release bundling and notarization, e.g. `0.1.0`)
 - `FLO_BUILD_NUMBER` (required build number for `CFBundleVersion`)
 
-Local config files are auto-loaded from the repo root in this order:
+Local config files for macOS are auto-loaded from `apps/macos` in this order:
 
 1. `.env.local`
 2. `.env`
@@ -98,7 +101,7 @@ Setup helper:
 ## Build
 
 ```bash
-swift build
+swift build --package-path apps/macos
 ```
 
 For local app usage with stable macOS Privacy permissions, launch the bundled dev app:

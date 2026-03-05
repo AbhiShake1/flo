@@ -6,9 +6,9 @@ Thanks for your interest in improving `flo`.
 1. Install Xcode 16+ command line tools.
 2. Clone the repository.
 3. Copy local config template if needed:
-   - `cp .env.local.example .env.local`
+   - `cp apps/macos/.env.local.example apps/macos/.env.local`
 4. Build the project:
-   - `swift build`
+   - `swift build --package-path apps/macos`
 5. Run tests:
    - `./scripts/run_tests.sh`
 

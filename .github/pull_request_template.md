@@ -5,9 +5,9 @@
 - 
 
 ## Validation
-- [ ] `swift build`
+- [ ] `swift build --package-path apps/macos`
 - [ ] `./scripts/run_tests.sh`
-- [ ] If scripts changed: `shellcheck scripts/*.sh`
+- [ ] If scripts changed: `shellcheck scripts/*.sh apps/macos/scripts/*.sh`
 
 ## Release/Distribution Impact
 - [ ] No release pipeline impact

@@ -4,12 +4,14 @@
 
 1. Run tests:
    - `./scripts/run_tests.sh`
-2. Run manual smoke harness:
+2. Build the macOS package:
+   - `swift build --package-path apps/macos`
+3. Run manual smoke harness:
    - `./scripts/manual_smoke_harness.sh`
-3. Confirm OAuth and OpenAI endpoint env configuration matches production.
-4. Verify host allowlist entries include only required domains.
-5. Verify rollout and rollback notes in `docs/rollback-and-rollout.md`.
-6. Confirm release tag uses semver format `vMAJOR.MINOR.PATCH`.
+4. Confirm OAuth and OpenAI endpoint env configuration matches production.
+5. Verify host allowlist entries include only required domains.
+6. Verify rollout and rollback notes in `docs/rollback-and-rollout.md`.
+7. Confirm release tag uses semver format `vMAJOR.MINOR.PATCH`.
 
 ## Build + Sign (Optional Notarize)
 
