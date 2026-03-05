@@ -1179,4 +1179,185 @@ mod tests {
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].0, "read this");
     }
+
+    #[test]
+    fn drive_effects_maps_oauth_failure_to_unauthorized_message() {
+        let mut controller = FloController::new();
+        let mut selection = FakeSelectionService { read: None };
+        let mut injection = FakeTextInjectionService::default();
+        let mut elevation = FakeElevationService {
+            outcome: ElevationPromptOutcome::AlreadyElevated,
+            fail: false,
+        };
+        let mut permissions = FakePermissionsService {
+            status: PermissionStatus::default(),
+            opened_targets: Vec::new(),
+        };
+        let mut floating = FakeFloatingBarService::default();
+        let mut dictation_store = FakeDictationPreferencesStore::default();
+        let mut voice_store = FakeVoicePreferencesStore::default();
+        let mut auth = FakeAuthService {
+            fail_start_oauth: true,
+            ..FakeAuthService::default()
+        };
+        let mut auth_sink = FakeAuthStateSink::default();
+        let mut speech = FakeSpeechCaptureService::default();
+        let mut tts = FakeTtsService::default();
+
+        let mut runtime = new_runtime(
+            &mut selection,
+            &mut injection,
+            &mut elevation,
+            &mut permissions,
+            &mut floating,
+            &mut dictation_store,
+            &mut voice_store,
+            &mut auth,
+            &mut auth_sink,
+            &mut speech,
+            &mut tts,
+        );
+
+        runtime.drive_effects(&mut controller, vec![ControllerEffect::StartOAuth]);
+
+        assert_eq!(
+            controller.state.status_message.as_deref(),
+            Some("You are not authenticated.")
+        );
+    }
+
+    #[test]
+    fn drive_effects_maps_capture_start_failure_to_network_error() {
+        let mut controller = FloController::new();
+        let mut selection = FakeSelectionService { read: None };
+        let mut injection = FakeTextInjectionService::default();
+        let mut elevation = FakeElevationService {
+            outcome: ElevationPromptOutcome::AlreadyElevated,
+            fail: false,
+        };
+        let mut permissions = FakePermissionsService {
+            status: PermissionStatus::default(),
+            opened_targets: Vec::new(),
+        };
+        let mut floating = FakeFloatingBarService::default();
+        let mut dictation_store = FakeDictationPreferencesStore::default();
+        let mut voice_store = FakeVoicePreferencesStore::default();
+        let mut auth = FakeAuthService::default();
+        let mut auth_sink = FakeAuthStateSink::default();
+        let mut speech = FakeSpeechCaptureService {
+            fail_start: true,
+            ..FakeSpeechCaptureService::default()
+        };
+        let mut tts = FakeTtsService::default();
+
+        let mut runtime = new_runtime(
+            &mut selection,
+            &mut injection,
+            &mut elevation,
+            &mut permissions,
+            &mut floating,
+            &mut dictation_store,
+            &mut voice_store,
+            &mut auth,
+            &mut auth_sink,
+            &mut speech,
+            &mut tts,
+        );
+
+        runtime.drive_effects(&mut controller, vec![ControllerEffect::StartSpeechCapture]);
+
+        assert_eq!(
+            controller.state.status_message.as_deref(),
+            Some("Network error: Unknown")
+        );
+    }
+
+    #[test]
+    fn drive_effects_maps_tts_failure_to_network_error() {
+        let mut controller = FloController::new();
+        let mut selection = FakeSelectionService { read: None };
+        let mut injection = FakeTextInjectionService::default();
+        let mut elevation = FakeElevationService {
+            outcome: ElevationPromptOutcome::AlreadyElevated,
+            fail: false,
+        };
+        let mut permissions = FakePermissionsService {
+            status: PermissionStatus::default(),
+            opened_targets: Vec::new(),
+        };
+        let mut floating = FakeFloatingBarService::default();
+        let mut dictation_store = FakeDictationPreferencesStore::default();
+        let mut voice_store = FakeVoicePreferencesStore::default();
+        let mut auth = FakeAuthService::default();
+        let mut auth_sink = FakeAuthStateSink::default();
+        let mut speech = FakeSpeechCaptureService::default();
+        let mut tts = FakeTtsService {
+            fail: true,
+            ..FakeTtsService::default()
+        };
+
+        let mut runtime = new_runtime(
+            &mut selection,
+            &mut injection,
+            &mut elevation,
+            &mut permissions,
+            &mut floating,
+            &mut dictation_store,
+            &mut voice_store,
+            &mut auth,
+            &mut auth_sink,
+            &mut speech,
+            &mut tts,
+        );
+
+        runtime.drive_effects(&mut controller, vec![ControllerEffect::StartTts]);
+
+        assert_eq!(
+            controller.state.status_message.as_deref(),
+            Some("Network error: Unknown")
+        );
+    }
+
+    #[test]
+    fn drive_effects_handles_empty_capture_as_audio_error() {
+        let mut controller = FloController::new();
+        let mut selection = FakeSelectionService { read: None };
+        let mut injection = FakeTextInjectionService::default();
+        let mut elevation = FakeElevationService {
+            outcome: ElevationPromptOutcome::AlreadyElevated,
+            fail: false,
+        };
+        let mut permissions = FakePermissionsService {
+            status: PermissionStatus::default(),
+            opened_targets: Vec::new(),
+        };
+        let mut floating = FakeFloatingBarService::default();
+        let mut dictation_store = FakeDictationPreferencesStore::default();
+        let mut voice_store = FakeVoicePreferencesStore::default();
+        let mut auth = FakeAuthService::default();
+        let mut auth_sink = FakeAuthStateSink::default();
+        let mut speech = FakeSpeechCaptureService::default();
+        let mut tts = FakeTtsService::default();
+
+        let mut runtime = new_runtime(
+            &mut selection,
+            &mut injection,
+            &mut elevation,
+            &mut permissions,
+            &mut floating,
+            &mut dictation_store,
+            &mut voice_store,
+            &mut auth,
+            &mut auth_sink,
+            &mut speech,
+            &mut tts,
+        );
+
+        runtime.drive_effects(&mut controller, vec![ControllerEffect::StopSpeechCapture]);
+
+        assert_eq!(
+            controller.state.status_message.as_deref(),
+            Some("No audio was captured.")
+        );
+    }
 }
