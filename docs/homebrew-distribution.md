@@ -11,7 +11,7 @@ This repository can be tapped directly as `AbhiShake1/flo`.
 
 ## CI Automation
 Tagging `v<version>` triggers `.github/workflows/release.yml`, which:
-1. Builds and notarizes the release artifacts.
+1. Builds release artifacts (currently non-notarized).
 2. Publishes the GitHub Release.
 3. Opens a PR that bumps `Casks/flo.rb` version + `sha256` using `scripts/update_cask.sh`.
 
@@ -25,7 +25,7 @@ brew upgrade --cask flo
 
 ```bash
 brew tap AbhiShake1/flo https://github.com/AbhiShake1/flo
-brew install --cask flo
+brew install --cask --no-quarantine flo
 ```
 
 For first-time bootstrap, merge the first automated cask bump PR after your

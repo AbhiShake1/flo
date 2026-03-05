@@ -138,7 +138,10 @@ This toolchain requires explicit test framework flags:
 
 Direct download:
 
-- Download notarized artifacts from GitHub Releases.
+- Download release artifacts from GitHub Releases.
+
+Note: current CI is configured for non-notarized builds, so first launch may
+require Gatekeeper bypass.
 
 Homebrew cask (this repository as your tap):
 
@@ -146,8 +149,8 @@ Homebrew cask (this repository as your tap):
 # one-time
 brew tap AbhiShake1/flo https://github.com/AbhiShake1/flo
 
-# install
-brew install --cask flo
+# install (non-notarized build; avoids quarantine prompts)
+brew install --cask --no-quarantine flo
 
 # future updates
 brew upgrade --cask flo
@@ -160,7 +163,7 @@ brew untap AbhiShake1/flo
 `brew upgrade --cask flo` picks up new versions after the automated cask bump PR
 from the release workflow is merged into `main`.
 For first-time setup, create and push your first release tag, then merge the
-automated cask bump PR before running `brew install --cask flo`.
+automated cask bump PR before running `brew install --cask --no-quarantine flo`.
 
 ## Release
 
@@ -176,6 +179,15 @@ FLO_DEVELOPER_IDENTITY="<Developer ID Application: ...>" \
 ./scripts/notarize_release.sh
 ```
 
+Create a non-notarized app bundle and DMG:
+
+```bash
+FLO_RELEASE_VERSION=0.1.0 \
+FLO_BUILD_NUMBER=1 \
+FLO_NOTARIZE=false \
+./scripts/notarize_release.sh
+```
+
 Publish a release with CI:
 
 ```bash
@@ -185,6 +197,6 @@ git push origin v0.1.0
 
 This triggers `.github/workflows/release.yml`, which:
 
-1. Runs tests and builds notarized release artifacts.
+1. Runs tests and builds release artifacts (currently non-notarized).
 2. Publishes the GitHub Release.
 3. Opens an automated PR that updates `Casks/flo.rb` with the release version and DMG checksum.

@@ -28,16 +28,13 @@ jobs:
       - name: Run tests
         run: ./scripts/run_tests.sh
 
-      - name: Build notarized artifacts
+      - name: Build release artifacts
         env:
           FLO_RELEASE_VERSION: ${{ github.ref_name }}
           FLO_BUILD_NUMBER: ${{ github.run_number }}
           FLO_OUTPUT_DIR: ${{ github.workspace }}/.artifacts/release
           FLO_BUILD_DMG: "true"
-          FLO_APPLE_TEAM_ID: ${{ secrets.FLO_APPLE_TEAM_ID }}
-          FLO_APPLE_ID: ${{ secrets.FLO_APPLE_ID }}
-          FLO_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.FLO_APPLE_APP_SPECIFIC_PASSWORD }}
-          FLO_DEVELOPER_IDENTITY: ${{ secrets.FLO_DEVELOPER_IDENTITY }}
+          FLO_NOTARIZE: "false"
         run: |
           set -euo pipefail
 

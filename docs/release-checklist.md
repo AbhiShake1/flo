@@ -11,24 +11,27 @@
 5. Verify rollout and rollback notes in `docs/rollback-and-rollout.md`.
 6. Confirm release tag uses semver format `vMAJOR.MINOR.PATCH`.
 
-## Build + Notarize
+## Build + Sign (Optional Notarize)
 
-1. Export Apple credentials, signing identity, and release metadata env vars:
+1. Export release metadata env vars:
    - `FLO_RELEASE_VERSION` (without `v`, e.g. `0.1.0`)
    - `FLO_BUILD_NUMBER` (integer build number)
+2. For non-notarized builds (current CI mode), run:
+   - `FLO_NOTARIZE=false ./scripts/notarize_release.sh`
+3. For notarized builds, also export:
    - `FLO_APPLE_TEAM_ID`
    - `FLO_APPLE_ID`
    - `FLO_APPLE_APP_SPECIFIC_PASSWORD`
    - `FLO_DEVELOPER_IDENTITY`
-2. Run:
+4. Then run:
    - `./scripts/notarize_release.sh`
-3. Confirm generated artifacts:
+5. Confirm generated artifacts:
    - `FloApp.app`
    - `FloApp-<version>-arm64.zip`
    - `FloApp-<version>-arm64.zip.sha256`
    - `FloApp-<version>-arm64.dmg` + `FloApp-<version>-arm64.dmg.sha256`
-4. Verify release gates pass:
-   - `spctl --assess --type execute --verbose FloApp.app`
+6. Verify release gates pass:
+   - `spctl --assess --type execute --verbose FloApp.app` (notarized builds only)
    - `codesign --verify --deep --strict --verbose=2 FloApp.app`
 
 ## Distribution
@@ -45,4 +48,4 @@
 5. Merge the cask bump PR so users can run:
    - `brew upgrade --cask flo`
 6. Publish release notes with known risks and rollback plan.
-7. Archive notarization logs and signing metadata.
+7. Archive signing metadata and, when applicable, notarization logs.
