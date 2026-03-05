@@ -106,6 +106,8 @@ jobs:
           HOMEBREW_NO_AUTO_UPDATE=1 brew audit --cask --strict --tap "$TAP_NAME" flo
 
       - name: Create cask bump pull request
+        id: create_cask_pr
+        continue-on-error: true
         uses: peter-evans/create-pull-request@v7
         with:
           branch: "chore/homebrew-cask-v${{ needs.release.outputs.version }}"
@@ -121,3 +123,9 @@ jobs:
           labels: |
             release
             homebrew
+
+      - name: Note manual PR fallback
+        if: ${{ steps.create_cask_pr.outcome != 'success' }}
+        run: |
+          echo "Automated PR creation is disabled for GITHUB_TOKEN in this repository."
+          echo "A cask bump branch was pushed; create the PR manually if needed."
