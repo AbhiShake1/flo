@@ -12,6 +12,8 @@
 - Provider config and platform update/security contracts documented.
 - Added strict parity governance docs: `04-controller-action-ledger.md`, `05-ui-parity-spec.md`, `06-error-message-parity.md`.
 - Added frozen domain/core/provider contract pass for parity-critical APIs.
+- Added reducer coverage for auth, permissions, shortcuts, dictation finalization, history paste-last-transcript, voice prefs, and rewrite presets.
+- Started P2 controller/provider parity implementation and integration tests.
 
 ## Blockers
 - None for scaffold stage.

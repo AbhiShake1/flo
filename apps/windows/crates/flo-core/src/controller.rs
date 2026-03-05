@@ -1,8 +1,9 @@
 use flo_domain::{
     AuthState, DictationBaseTone, DictationLiveFinalizationMode, DictationRewritePreferences,
-    DictationStyleLevel, FloatingBarState, PermissionKind, PermissionStatus, PlatformErrorCode,
-    ProviderRoutingOverrides, RecorderState, SelectionReadMethod, ShortcutBinding,
-    TextInjectionFailureReason, UserSession,
+    DictationRewritePreset, DictationStyleLevel, FloatingBarState, PermissionKind,
+    PermissionStatus, PlatformErrorCode, ProviderRoutingOverrides, RecorderState,
+    SelectionReadMethod, ShortcutBinding, TextInjectionFailureReason, UserSession,
+    VoicePreferences,
 };
 
 use crate::capabilities::PlatformCapabilities;
@@ -16,9 +17,11 @@ pub struct ControllerState {
     pub live_dictation_enabled: bool,
     pub live_transcript_preview: String,
     pub dictation_rewrite_preferences: DictationRewritePreferences,
+    pub voice_preferences: VoicePreferences,
     pub provider_routing_overrides: ProviderRoutingOverrides,
     pub status_message: Option<String>,
     pub last_selection_read_method: Option<SelectionReadMethod>,
+    pub last_dictation_transcript: Option<String>,
 }
 
 impl Default for ControllerState {
@@ -31,9 +34,11 @@ impl Default for ControllerState {
             live_dictation_enabled: false,
             live_transcript_preview: String::new(),
             dictation_rewrite_preferences: DictationRewritePreferences::default(),
+            voice_preferences: VoicePreferences::default(),
             provider_routing_overrides: ProviderRoutingOverrides::default(),
             status_message: None,
             last_selection_read_method: None,
+            last_dictation_transcript: None,
         }
     }
 }
@@ -56,6 +61,10 @@ pub enum FloCommand {
     SetDictationEmoji(DictationStyleLevel),
     SetDictationCustomInstructions(String),
     SetDictationLiveFinalizationMode(DictationLiveFinalizationMode),
+    ApplyDictationRewritePreset(DictationRewritePreset),
+    PasteLastTranscript,
+    UpdateVoice(String),
+    UpdateVoiceSpeed(f32),
     ClearHistory,
     StartDictationFromHotkey,
     StopDictationFromHotkey,
@@ -85,6 +94,7 @@ pub enum ControllerEffect {
     RequestPermission(PermissionKind),
     PersistShortcuts,
     PersistRewritePreferences,
+    PersistVoicePreferences,
     PersistRoutingOverrides,
     ClearHistory,
     ShowFloatingBar(FloatingBarState),
@@ -93,6 +103,10 @@ pub enum ControllerEffect {
     StartSpeechCapture,
     StopSpeechCapture,
     FinalizeDictation(LiveFinalizationPlan),
+    InjectText {
+        text: String,
+        fallback_to_clipboard: bool,
+    },
     ReadSelected {
         prefer_uia: bool,
         fallback_to_clipboard: bool,
@@ -155,6 +169,7 @@ impl FloController {
                 self.state.auth_state = AuthState::LoggedOut;
                 self.state.recorder_state = RecorderState::Idle;
                 self.state.live_transcript_preview.clear();
+                self.state.last_dictation_transcript = None;
                 vec![ControllerEffect::Logout, ControllerEffect::HideFloatingBar]
             }
             FloCommand::RefreshPermissions => vec![ControllerEffect::RefreshPermissions],
@@ -217,6 +232,33 @@ impl FloController {
                     .dictation_rewrite_preferences
                     .live_finalization_mode = mode;
                 vec![ControllerEffect::PersistRewritePreferences]
+            }
+            FloCommand::ApplyDictationRewritePreset(preset) => {
+                apply_rewrite_preset(&mut self.state.dictation_rewrite_preferences, preset);
+                self.state.status_message = Some(format!(
+                    "Applied {} rewrite preset.",
+                    rewrite_preset_display_name(preset)
+                ));
+                vec![ControllerEffect::PersistRewritePreferences]
+            }
+            FloCommand::PasteLastTranscript => {
+                if let Some(transcript) = self.state.last_dictation_transcript.clone() {
+                    vec![ControllerEffect::InjectText {
+                        text: transcript,
+                        fallback_to_clipboard: true,
+                    }]
+                } else {
+                    self.state.status_message = Some("No transcript available yet.".to_string());
+                    Vec::new()
+                }
+            }
+            FloCommand::UpdateVoice(voice) => {
+                self.state.voice_preferences.voice = voice;
+                vec![ControllerEffect::PersistVoicePreferences]
+            }
+            FloCommand::UpdateVoiceSpeed(speed) => {
+                self.state.voice_preferences.speed = speed.clamp(0.25, 4.0);
+                vec![ControllerEffect::PersistVoicePreferences]
             }
             FloCommand::ClearHistory => vec![ControllerEffect::ClearHistory],
             FloCommand::StartDictationFromHotkey => {
@@ -353,6 +395,8 @@ impl FloController {
                 };
 
                 self.state.live_transcript_preview = normalized;
+                self.state.last_dictation_transcript =
+                    Some(self.state.live_transcript_preview.clone());
                 match plan {
                     LiveFinalizationPlan::Noop => {
                         self.state.recorder_state = RecorderState::Idle;
@@ -475,6 +519,81 @@ pub fn plan_live_finalization(
     }
 }
 
+fn apply_rewrite_preset(
+    preferences: &mut DictationRewritePreferences,
+    preset: DictationRewritePreset,
+) {
+    let (base_tone, warmth, enthusiasm, headers_and_lists, emoji) = match preset {
+        DictationRewritePreset::Default => (
+            DictationBaseTone::Default,
+            DictationStyleLevel::Default,
+            DictationStyleLevel::Default,
+            DictationStyleLevel::Default,
+            DictationStyleLevel::Less,
+        ),
+        DictationRewritePreset::Professional => (
+            DictationBaseTone::Professional,
+            DictationStyleLevel::Less,
+            DictationStyleLevel::Less,
+            DictationStyleLevel::More,
+            DictationStyleLevel::Less,
+        ),
+        DictationRewritePreset::Friendly => (
+            DictationBaseTone::Friendly,
+            DictationStyleLevel::More,
+            DictationStyleLevel::Default,
+            DictationStyleLevel::Default,
+            DictationStyleLevel::Default,
+        ),
+        DictationRewritePreset::Candid => (
+            DictationBaseTone::Candid,
+            DictationStyleLevel::Default,
+            DictationStyleLevel::Less,
+            DictationStyleLevel::Default,
+            DictationStyleLevel::Less,
+        ),
+        DictationRewritePreset::Efficient => (
+            DictationBaseTone::Efficient,
+            DictationStyleLevel::Less,
+            DictationStyleLevel::Less,
+            DictationStyleLevel::More,
+            DictationStyleLevel::Less,
+        ),
+        DictationRewritePreset::Nerdy => (
+            DictationBaseTone::Nerdy,
+            DictationStyleLevel::Default,
+            DictationStyleLevel::More,
+            DictationStyleLevel::More,
+            DictationStyleLevel::Less,
+        ),
+        DictationRewritePreset::Quirky => (
+            DictationBaseTone::Quirky,
+            DictationStyleLevel::More,
+            DictationStyleLevel::More,
+            DictationStyleLevel::Default,
+            DictationStyleLevel::More,
+        ),
+    };
+
+    preferences.base_tone = base_tone;
+    preferences.warmth = warmth;
+    preferences.enthusiasm = enthusiasm;
+    preferences.headers_and_lists = headers_and_lists;
+    preferences.emoji = emoji;
+}
+
+fn rewrite_preset_display_name(preset: DictationRewritePreset) -> &'static str {
+    match preset {
+        DictationRewritePreset::Default => "Default",
+        DictationRewritePreset::Professional => "Professional",
+        DictationRewritePreset::Friendly => "Friendly",
+        DictationRewritePreset::Candid => "Candid",
+        DictationRewritePreset::Efficient => "Efficient",
+        DictationRewritePreset::Nerdy => "Nerdy",
+        DictationRewritePreset::Quirky => "Quirky",
+    }
+}
+
 pub fn canonical_error_message(code: PlatformErrorCode, detail: Option<&str>) -> String {
     match code {
         PlatformErrorCode::OAuthMissingConfiguration => {
@@ -548,8 +667,9 @@ fn normalize_transcript(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use flo_domain::{
-        AppIntegrityLevel, DictationLiveFinalizationMode, FloatingBarState, KeyCombo, LogicalKey,
-        ShortcutAction, ShortcutBinding, ShortcutModifiers,
+        AppIntegrityLevel, DictationBaseTone, DictationLiveFinalizationMode,
+        DictationRewritePreset, FloatingBarState, KeyCombo, LogicalKey, ShortcutAction,
+        ShortcutBinding, ShortcutModifiers,
     };
 
     use super::{
@@ -719,5 +839,82 @@ mod tests {
         ));
 
         assert!(effects.contains(&ControllerEffect::PromptForElevation));
+    }
+
+    #[test]
+    fn paste_last_transcript_emits_inject_effect_with_fallback() {
+        let mut controller = FloController::new();
+        controller.state.last_dictation_transcript = Some("last text".to_string());
+
+        let effects = controller.dispatch(
+            FloCommand::PasteLastTranscript,
+            &PlatformCapabilities::win32_default(),
+        );
+
+        assert_eq!(
+            effects,
+            vec![ControllerEffect::InjectText {
+                text: "last text".to_string(),
+                fallback_to_clipboard: true,
+            }]
+        );
+    }
+
+    #[test]
+    fn paste_last_transcript_without_history_sets_status_message() {
+        let mut controller = FloController::new();
+
+        let effects = controller.dispatch(
+            FloCommand::PasteLastTranscript,
+            &PlatformCapabilities::win32_default(),
+        );
+
+        assert!(effects.is_empty());
+        assert_eq!(
+            controller.state.status_message.as_deref(),
+            Some("No transcript available yet.")
+        );
+    }
+
+    #[test]
+    fn update_voice_and_speed_persists_preferences() {
+        let mut controller = FloController::new();
+        let capabilities = PlatformCapabilities::win32_default();
+
+        let update_voice =
+            controller.dispatch(FloCommand::UpdateVoice("verse".to_string()), &capabilities);
+        let update_speed = controller.dispatch(FloCommand::UpdateVoiceSpeed(9.5), &capabilities);
+
+        assert_eq!(
+            update_voice,
+            vec![ControllerEffect::PersistVoicePreferences]
+        );
+        assert_eq!(
+            update_speed,
+            vec![ControllerEffect::PersistVoicePreferences]
+        );
+        assert_eq!(controller.state.voice_preferences.voice, "verse");
+        assert_eq!(controller.state.voice_preferences.speed, 4.0);
+    }
+
+    #[test]
+    fn apply_rewrite_preset_sets_expected_style_profile() {
+        let mut controller = FloController::new();
+        let capabilities = PlatformCapabilities::win32_default();
+
+        let effects = controller.dispatch(
+            FloCommand::ApplyDictationRewritePreset(DictationRewritePreset::Professional),
+            &capabilities,
+        );
+
+        assert_eq!(effects, vec![ControllerEffect::PersistRewritePreferences]);
+        assert_eq!(
+            controller.state.dictation_rewrite_preferences.base_tone,
+            DictationBaseTone::Professional
+        );
+        assert_eq!(
+            controller.state.status_message.as_deref(),
+            Some("Applied Professional rewrite preset.")
+        );
     }
 }

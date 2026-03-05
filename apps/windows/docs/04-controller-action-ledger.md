@@ -56,9 +56,9 @@ Status legend: `Not Started`, `In Progress`, `Parity`, `Exception`.
 | A48 | `openSystemSettings(for permission: PermissionKind)` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
 | A49 | `updateShortcut(action: ShortcutAction, combo: KeyCombo)` | `FloCommand::UpdateShortcut` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A50 | `resetShortcutsToDefault()` | `FloCommand::ResetShortcutsToDefault` | `flo-core/src/controller.rs` reducer tests | In Progress |
-| A51 | `pasteLastTranscript()` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A52 | `updateVoice(_ voice: String)` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
-| A53 | `updateVoiceSpeed(_ speed: Double)` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
+| A51 | `pasteLastTranscript()` | `FloCommand::PasteLastTranscript` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A52 | `updateVoice(_ voice: String)` | `FloCommand::UpdateVoice` | `flo-core/src/controller.rs` reducer tests | In Progress |
+| A53 | `updateVoiceSpeed(_ speed: Double)` | `FloCommand::UpdateVoiceSpeed` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A54 | `setLiveDictationEnabled(_ enabled: Bool)` | `FloCommand::SetLiveDictationEnabled` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A55 | `setDictationRewriteEnabled(_ enabled: Bool)` | `FloCommand::SetDictationRewriteEnabled` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A56 | `setDictationBaseTone(_ tone: DictationBaseTone)` | `FloCommand::SetDictationBaseTone` | `flo-core/src/controller.rs` reducer tests | In Progress |
@@ -68,7 +68,7 @@ Status legend: `Not Started`, `In Progress`, `Parity`, `Exception`.
 | A60 | `setDictationEmoji(_ level: DictationStyleLevel)` | `FloCommand::SetDictationEmoji` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A61 | `setDictationCustomInstructions(_ text: String)` | `FloCommand::SetDictationCustomInstructions` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A62 | `setDictationLiveFinalizationMode(_ mode: DictationLiveFinalizationMode)` | `FloCommand::SetDictationLiveFinalizationMode` + `plan_live_finalization` | `flo-core/src/controller.rs` reducer tests | In Progress |
-| A63 | `applyDictationRewritePreset(_ preset: DictationRewritePreset)` | TBD (map in P1 freeze) | `apps/windows/docs/03-acceptance-tests.md` | Not Started |
+| A63 | `applyDictationRewritePreset(_ preset: DictationRewritePreset)` | `FloCommand::ApplyDictationRewritePreset` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A64 | `completeHotkeyConfirmation()` | `FloCommand::CompleteHotkeyConfirmation` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A65 | `clearHistory()` | `FloCommand::ClearHistory` | `flo-core/src/controller.rs` reducer tests | In Progress |
 | A66 | `startDictationFromHotkey() async` | `FloCommand::StartDictationFromHotkey` + `ControllerEvent::CaptureStarted` | `flo-core/src/controller.rs` reducer tests | In Progress |

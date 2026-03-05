@@ -17,6 +17,7 @@ Windows must satisfy port contracts equivalent to macOS protocols while preservi
 - `TTSService`
 - `PermissionsService` (includes `open_settings_target(permission_kind)` mapping)
 - `FloatingBarManaging` (renders explicit chip model)
+- `VoicePreferencesStore` (voice + speed persistence contract)
 
 ### Core invariants
 

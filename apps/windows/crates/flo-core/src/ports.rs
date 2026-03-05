@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use flo_domain::{
     AppIntegrityLevel, AuthState, DictationRewritePreferences, FloatingBarState, PermissionKind,
     PermissionStatus, PlatformErrorCode, SelectionReadResult, ShortcutBinding,
-    TextInjectionFailureReason, UserSession,
+    TextInjectionFailureReason, UserSession, VoicePreferences,
 };
 use thiserror::Error;
 
@@ -181,6 +181,11 @@ pub trait FloatingBarManaging: Send {
 pub trait DictationPreferencesStore: Send {
     fn load(&self) -> DictationRewritePreferences;
     fn save(&mut self, preferences: &DictationRewritePreferences) -> CoreResult<()>;
+}
+
+pub trait VoicePreferencesStore: Send {
+    fn load(&self) -> VoicePreferences;
+    fn save(&mut self, preferences: &VoicePreferences) -> CoreResult<()>;
 }
 
 pub trait AuthStateSink: Send {

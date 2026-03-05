@@ -9,8 +9,8 @@ Status legend: `Not Started`, `In Progress`, `Parity`, `Exception`.
 | Milestone | Scope | Owner | Status | Exit criteria |
 |---|---|---|---|---|
 | P0 | Spec freeze and macOS baseline capture | All | In Progress | `04`, `05`, `06` docs locked and signed. |
-| P1 | Domain/core/provider/platform contract freeze + reducer harness | Core/Provider | In Progress | Contract APIs stable; reducer golden tests present. |
-| P2 | Controller/provider behavior parity | Engineer A | Not Started | Deterministic auth/routing/failover tests pass. |
+| P1 | Domain/core/provider/platform contract freeze + reducer harness | Core/Provider | Parity | Contract APIs frozen; reducer coverage spans auth/permissions/shortcuts/dictation/history/voice/routing categories. |
+| P2 | Controller/provider behavior parity | Engineer A | In Progress | Deterministic auth/routing/failover tests passing; action-by-action parity mapping still in progress. |
 | P3 | Platform core I/O parity | Engineer B | Not Started | Hotkeys/audio/selection/injection/elevation matrix passes. |
 | P4 | Security/persistence parity | Engineer B | Not Started | Credential Manager + DPAPI + corruption recovery pass. |
 | P5 | Native Win32 UI parity | Engineer C | Not Started | Side-by-side chip/settings/onboarding parity at 100/125/150 DPI. |

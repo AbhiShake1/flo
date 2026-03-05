@@ -226,6 +226,18 @@ pub enum DictationLiveFinalizationMode {
     ReplaceWithFinal,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DictationRewritePreset {
+    Default,
+    Professional,
+    Friendly,
+    Candid,
+    Efficient,
+    Nerdy,
+    Quirky,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DictationRewritePreferences {
@@ -252,6 +264,22 @@ impl Default for DictationRewritePreferences {
             headers_and_lists: DictationStyleLevel::Default,
             emoji: DictationStyleLevel::Less,
             custom_instructions: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VoicePreferences {
+    pub voice: String,
+    pub speed: f32,
+}
+
+impl Default for VoicePreferences {
+    fn default() -> Self {
+        Self {
+            voice: "alloy".to_string(),
+            speed: 1.0,
         }
     }
 }
