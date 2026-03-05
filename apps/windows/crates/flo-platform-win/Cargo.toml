@@ -7,7 +7,9 @@ license.workspace = true
 [dependencies]
 flo-core = { path = "../flo-core" }
 flo-domain = { path = "../flo-domain" }
+getrandom.workspace = true
 hex.workspace = true
+serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 
@@ -16,6 +18,7 @@ windows = { version = "0.58", features = [
   "Win32_Foundation",
   "Win32_Security_Credentials",
   "Win32_Security_Cryptography",
+  "Win32_System_Memory",
   "Win32_System_Threading",
   "Win32_UI_Accessibility",
   "Win32_UI_Input_KeyboardAndMouse",

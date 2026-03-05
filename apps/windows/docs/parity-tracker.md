@@ -12,7 +12,7 @@ Status legend: `Not Started`, `In Progress`, `Parity`, `Exception`.
 | P1 | Domain/core/provider/platform contract freeze + reducer harness | Core/Provider | Parity | Contract APIs frozen; reducer coverage spans auth/permissions/shortcuts/dictation/history/voice/routing categories. |
 | P2 | Controller/provider behavior parity | Engineer A | In Progress | Deterministic auth/routing/failover tests passing; credential/auth/permission orchestration now covered; action-by-action parity mapping still in progress. |
 | P3 | Platform core I/O parity | Engineer B | In Progress | Deterministic unit matrix for hotkeys/audio/selection/injection/elevation is green; Win32 adapter wiring into app harness is pending. |
-| P4 | Security/persistence parity | Engineer B | Not Started | Credential Manager + DPAPI + corruption recovery pass. |
+| P4 | Security/persistence parity | Engineer B | In Progress | Credential Manager + DPAPI backends and encrypted history lifecycle (retention + corruption recovery) are implemented with deterministic tests; Win32 runtime validation pending. |
 | P5 | Native Win32 UI parity | Engineer C | Not Started | Side-by-side chip/settings/onboarding parity at 100/125/150 DPI. |
 | P6 | Packaging + update paths | Engineer C | Not Started | ZIP install/upgrade/rollback + updater checksum paths pass. |
 | P7 | End-to-end parity hardening | All | Not Started | Full parity matrix green, no open exceptions. |
