@@ -108,7 +108,7 @@ jobs:
       - name: Create cask bump pull request
         id: create_cask_pr
         continue-on-error: true
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: "chore/homebrew-cask-v${{ needs.release.outputs.version }}"
           delete-branch: true
